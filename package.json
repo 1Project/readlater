@@ -1,0 +1,13 @@
+{
+  "name": "readlater",
+  "private": true,
+  "scripts": {
+    "build": "npm --prefix functions run build && npm --prefix web run build",
+    "test": "npm --prefix functions test && npm --prefix web test",
+    "emulators": "firebase emulators:start --project demo-readlater",
+    "e2e": "npm --prefix e2e test"
+  },
+  "devDependencies": {
+    "firebase-tools": "^15.33.0"
+  }
+}
