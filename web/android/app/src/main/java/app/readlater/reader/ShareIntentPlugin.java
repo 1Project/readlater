@@ -34,7 +34,9 @@ import java.util.concurrent.Executors;
  *   setReaderActive({active: boolean})    while true, volume / page keys turn pages (see MainActivity).
  *
  * Files are copied from the content URI to cacheDir/shared/ (≤ 100 MB) off the main thread; JS turns
- * `path` into a fetchable URL with Capacitor.convertFileSrc(path).
+ * `path` into a fetchable URL with Capacitor.convertFileSrc(path). Only content:// URIs of other apps are
+ * read (never file:// or our own FileProvider, see SharedFiles.isAllowedSource), and only files whose
+ * bytes are a PDF or an EPUB are handed on.
  */
 @CapacitorPlugin(name = "ShareIntent")
 public class ShareIntentPlugin extends Plugin {
@@ -91,7 +93,7 @@ public class ShareIntentPlugin extends Plugin {
             Uri data = intent.getData();
             if (data == null) return;
             String scheme = data.getScheme();
-            // readlater:// deep links are handled by @capacitor/app (appUrlOpen).
+            // readlater:// deep links are handled by @capacitor/app (appUrlOpen); file:// is refused in copyToCache.
             if (ContentResolver.SCHEME_CONTENT.equals(scheme) || ContentResolver.SCHEME_FILE.equals(scheme)) {
                 intent.putExtra(HANDLED_EXTRA, true);
                 copyAndDeliver(data, type);
@@ -192,6 +194,9 @@ public class ShareIntentPlugin extends Plugin {
     }
 
     private JSObject copyToCache(Uri uri, String declaredType) throws IOException {
+        if (!SharedFiles.isAllowedSource(uri.getScheme(), uri.getAuthority(), getContext().getPackageName())) {
+            throw new IOException("This file cannot be opened from here. Share it from the app that has it.");
+        }
         ContentResolver resolver = getContext().getContentResolver();
         String displayName = null;
         long declaredSize = -1;
@@ -223,16 +228,27 @@ public class ShareIntentPlugin extends Plugin {
         File out = new File(sub, name);
 
         long total = 0;
+        byte[] head = new byte[SharedFiles.SNIFF_BYTES];
+        int headLen = 0;
         try (InputStream in = resolver.openInputStream(uri); OutputStream os = new FileOutputStream(out)) {
             if (in == null) throw new IOException("Could not open the shared file");
             byte[] buf = new byte[64 * 1024];
             int n;
             while ((n = in.read(buf)) != -1) {
+                if (headLen < head.length) {
+                    int k = Math.min(n, head.length - headLen);
+                    System.arraycopy(buf, 0, head, headLen, k);
+                    headLen += k;
+                }
                 total += n;
                 if (total > SharedFiles.MAX_BYTES) {
                     throw new IOException("File is larger than 100 MB");
                 }
                 os.write(buf, 0, n);
+            }
+            // The sender only declares a type: the bytes have to agree.
+            if (total > 0 && !SharedFiles.looksLike(head, headLen, mime)) {
+                throw new IOException("This is not a PDF or EPUB file");
             }
         } catch (IOException e) {
             //noinspection ResultOfMethodCallIgnored

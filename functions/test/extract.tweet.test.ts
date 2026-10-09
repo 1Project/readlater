@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { extractUrl, parseTweetUrl } from '../src/extract';
-import { articleToHtml, buildTweet, buildTweetFromOembed, tweetTextHtml, type FxTweet } from '../src/extract/tweet';
+import { articleToHtml, buildTweet, buildTweetFromOembed, selfThread, tweetTextHtml, type FxTweet } from '../src/extract/tweet';
 import { fixture, fixtureJson, mockFetch } from './fixtures/extract/mockFetch';
 
 afterEach(() => vi.restoreAllMocks());
@@ -108,7 +108,8 @@ describe('oEmbed fallback', () => {
     const r = await extractUrl('https://twitter.com/elonmusk/status/1585341984679469056?s=46');
     expect(r.type).toBe('tweet');
     expect(r.author).toBe('Elon Musk (@elonmusk)');
-    expect(spy).toHaveBeenCalledTimes(2);
+    // status + thread endpoints (both failing), then oEmbed
+    expect(spy).toHaveBeenCalledTimes(3);
   });
 
   it('uses FxTwitter first and reports missing posts', async () => {
@@ -120,3 +121,84 @@ describe('oEmbed fallback', () => {
     await expect(extractUrl('https://x.com/a/status/1')).rejects.toThrow(/not found/);
   });
 });
+
+describe('self-threads', () => {
+  type ThreadResponse = { code: number; status: FxTweet; thread: FxTweet[] };
+  const data = () => fixtureJson<ThreadResponse>('fxtwitter-thread.json');
+  const ids = (list: FxTweet[]) => list.map((t) => t.id);
+
+  it('keeps the same-author reply chain around the post (real FxTwitter v2 thread, trimmed)', () => {
+    const { status, thread } = data();
+    expect(ids(selfThread(status, thread))).toEqual(ids(thread));
+    // other people's replies and branches are ignored; the earliest self-reply continues the thread
+    const stranger: FxTweet = { ...thread[2], id: '1002103559276470000', author: { name: 'Someone', screen_name: 'someone' } };
+    const lateBranch: FxTweet = { ...thread[3], id: '1002199999999999999', created_timestamp: thread[3].created_timestamp! + 9999 };
+    expect(ids(selfThread(status, [lateBranch, stranger, ...thread]))).toEqual(ids(thread));
+    // a post that is not part of a thread stays alone
+    const solo: FxTweet = { ...thread[0], id: '1', replying_to: null };
+    expect(ids(selfThread(solo, thread))).toEqual(['1']);
+  });
+
+  it('renders the whole thread as one document', () => {
+    const { status, thread } = data();
+    const r = buildTweet(status, selfThread(status, thread));
+    expect(r.title).toBe('@naval: How to Get Rich (without getting lucky):');
+    expect(r.author).toBe('Naval (@naval)');
+    expect(r.canonicalUrl).toBe('https://x.com/naval/status/1002103497725173760');
+    expect(r.publishedAt?.toISOString()).toBe(new Date(thread[0].created_timestamp! * 1000).toISOString());
+    expect(r.html.match(/<strong>Naval<\/strong>/g)).toHaveLength(1); // one author line
+    expect(r.html).toContain('<p><small>Thread · 5 posts</small></p>');
+    expect(r.html).not.toContain('Replying to');
+    expect(r.html).toContain('<p>Seek wealth, not money or status.');
+    const order = thread.map((t) => r.html.indexOf(escapeForHtml(t.text.split('\n')[0].slice(0, 30))));
+    expect(order.every((x, i) => x > 0 && (i === 0 || x > order[i - 1]))).toBe(true);
+    expect(r.excerpt).toMatch(/^How to Get Rich \(without getting lucky\): Seek wealth/);
+  });
+
+  it('fetches the thread alongside the post (mocked network)', async () => {
+    const t = data();
+    const spy = mockFetch([
+      ['https://api.fxtwitter.com/status/1002103497725173760', { body: JSON.stringify({ code: 200, tweet: t.status }), type: 'application/json' }],
+      ['https://api.fxtwitter.com/2/thread/1002103497725173760', { body: JSON.stringify(t), type: 'application/json' }],
+    ]);
+    const r = await extractUrl('https://x.com/naval/status/1002103497725173760');
+    expect(r.html).toContain('Thread · 5 posts');
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
+
+  it('uses the thread endpoint when the status endpoint fails, and works without it', async () => {
+    const t = data();
+    mockFetch([['https://api.fxtwitter.com/2/thread/1002103497725173760', { body: JSON.stringify(t), type: 'application/json' }]]);
+    expect((await extractUrl('https://x.com/naval/status/1002103497725173760')).html).toContain('Thread · 5 posts');
+    vi.restoreAllMocks();
+    mockFetch([['https://api.fxtwitter.com/status/1585341984679469056', { body: fixture('fxtwitter-video.json'), type: 'application/json' }]]);
+    const single = await extractUrl('https://x.com/elonmusk/status/1585341984679469056');
+    expect(single.html).not.toContain('Thread ·');
+  });
+
+  it('pages long threads from the tail', async () => {
+    const author = { name: 'Writer', screen_name: 'writer' };
+    const post = (n: number): FxTweet => ({
+      id: String(1000 + n),
+      url: `https://x.com/writer/status/${1000 + n}`,
+      text: `Post number ${n}.`,
+      author,
+      created_timestamp: 1_700_000_000 + n,
+      replying_to: n ? { screen_name: 'writer', status: String(999 + n) } : null,
+    });
+    const all = Array.from({ length: 45 }, (_, i) => post(i));
+    const page = (from: number) => ({ code: 200, status: all[from], thread: all.slice(Math.max(0, from - 36), from + 31) });
+    const spy = mockFetch([
+      ['https://api.fxtwitter.com/status/1000', { body: JSON.stringify({ code: 200, tweet: all[0] }), type: 'application/json' }],
+      [/^https:\/\/api\.fxtwitter\.com\/2\/thread\/(\d+)$/, (url) => ({ body: JSON.stringify(page(Number(url.split('/').pop()) - 1000)), type: 'application/json' })],
+    ]);
+    const r = await extractUrl('https://x.com/writer/status/1000');
+    expect(r.html).toContain('Thread · 45 posts');
+    expect(r.html).toContain('Post number 44.');
+    expect(spy.mock.calls.map((c) => String(c[0]))).toContain('https://api.fxtwitter.com/2/thread/1030');
+  });
+});
+
+function escapeForHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}

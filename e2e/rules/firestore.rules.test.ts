@@ -334,6 +334,24 @@ describe('items: fetchStatus transitions', () => {
     });
   }
 
+  it('processing with a live run (processingAt < 10 min ago) cannot be queued again; a stale one can', async () => {
+    const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000);
+    await seed(ITEM, processedItem({ fetchStatus: 'processing', processingAt: minutesAgo(2), processingRun: 'r1' }));
+    await assertFails(alice().doc(ITEM).update({ fetchStatus: 'pending', fetchError: null, updatedAt: serverTimestamp() }));
+    // Other edits still work while it is processing.
+    await assertSucceeds(alice().doc(ITEM).update({ favorite: true }));
+    await seed(ITEM, processedItem({ fetchStatus: 'processing', processingAt: minutesAgo(11), processingRun: 'r1' }));
+    await assertSucceeds(alice().doc(ITEM).update({ fetchStatus: 'pending', fetchError: null, updatedAt: serverTimestamp() }));
+  });
+
+  it('client cannot write the run bookkeeping fields', async () => {
+    await seed(ITEM, processedItem({ fetchStatus: 'error', fetchError: 'Waiting', retryAt: new Date() }));
+    for (const field of ['processingAt', 'processingRun', 'processAttempts', 'retryAt']) {
+      await assertFails(alice().doc(ITEM).update({ [field]: field === 'processAttempts' ? 0 : field === 'processingRun' ? 'x' : new Date() }));
+    }
+    await assertFails(alice().doc(ITEM).update({ retryAt: deleteField() }));
+  });
+
   it('client cannot replace an error message, only clear it', async () => {
     await seed(ITEM, processedItem({ fetchStatus: 'error', fetchError: 'Timed out' }));
     await assertFails(alice().doc(ITEM).update({ fetchError: 'Fine actually' }));
@@ -377,6 +395,18 @@ describe('highlights', () => {
     await assertSucceeds(alice().doc(H).set(valid({ text: str(5000), note: str(5000), prefix: str(64), suffix: str(64) })));
   });
 
+  it('accepts every highlight colour on create and update (color is optional)', async () => {
+    let i = 0;
+    for (const color of ['yellow', 'green', 'blue', 'pink']) {
+      await assertSucceeds(alice().doc(`users/${ALICE}/highlights/c${i++}`).set(valid({ color })));
+    }
+    await assertSucceeds(alice().doc(H).set(valid()));
+    await assertSucceeds(alice().doc(H).update({ color: 'green', updatedAt: serverTimestamp() }));
+    await assertSucceeds(alice().doc(H).update({ color: 'pink' }));
+    await assertFails(alice().doc(H).update({ color: 'purple' }));
+    await assertSucceeds(alice().doc(H).update({ color: deleteField() }));
+  });
+
   const bad: [string, Record<string, unknown>][] = [
     ['empty text', { text: '' }],
     ['text too long', { text: str(5001) }],
@@ -385,7 +415,10 @@ describe('highlights', () => {
     ['suffix too long', { suffix: str(65) }],
     ['itemId not a string', { itemId: 1 }],
     ['itemId empty', { itemId: '' }],
-    ['extra field', { color: 'yellow' }],
+    ['extra field', { colour: 'yellow' }],
+    ['color outside the palette', { color: 'red' }],
+    ['color not a string', { color: 1 }],
+    ['color null', { color: null }],
     ['createdAt not a timestamp', { createdAt: 1 }],
   ];
   for (const [name, o] of bad) {

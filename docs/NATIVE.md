@@ -50,10 +50,12 @@ Note that Android refuses to update an app signed with a different key: switchin
 build to a release-signed build (or back) needs one uninstall.
 
 **From GitHub.** CI (`.github/workflows/ci.yml`) uploads `readlater-debug.apk` as a workflow artifact
-for every push. `deploy.yml` attaches an APK built against your deployed project to a GitHub Release
-(`build-<n>`) after each deploy of `main`. Set the secrets `ANDROID_KEYSTORE_BASE64`
+for every push. `deploy.yml` attaches a release-signed APK built against your deployed project to a GitHub Release
+(`build-<n>`) after each deploy of `main`, once the secrets `ANDROID_KEYSTORE_BASE64`
 (`base64 -w0 readlater-release.jks`), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and optionally
-`ANDROID_KEY_PASSWORD` to get release-signed APKs there.
+`ANDROID_KEY_PASSWORD` are set. Without them nothing is published: debug APKs are debuggable and signed with
+the key committed to this repository, so anyone could sign an "update" that replaces them — use those for
+testing only.
 
 ### Install on a Boox (Go 6 or any Android 11+ e-reader)
 
@@ -83,17 +85,18 @@ the keys keep their normal function). Remotes that send arrow keys work as well.
 
 Readlater appears in the Android share sheet as **Save to Readlater**:
 
-- **Links / text** (browser, RSS reader, X, …) → the first link is saved and opened in the reader.
-  Text without a link opens the *Add* form pre-filled.
+- **Links / text** (browser, RSS reader, X, …) → the first link is saved; *Saved ✓* then offers *Read now*,
+  *Add tags* and *Done* (back to the app you shared from). Text without a link opens the *Add* form pre-filled.
 - **PDF / EPUB files** (share, or *Open with → Readlater* from a file manager or e-mail attachment)
-  → uploaded to your library (≤ 100 MB) and opened in the reader, which shows the text once it has
+  → checked to really be a PDF / EPUB, uploaded to your library (≤ 100 MB) and opened in the reader, which shows the text once it has
   been processed. If you are signed out, sign in first; the upload starts right after.
 
 ### Signing in inside the app
 
-- **Continue with Google** opens your browser at `<your site>/app-login`. Sign in there; the page
-  creates a one-time code and sends you back to the app via `readlater://login?code=…`, which signs
-  the app in. (Some browsers ask "Open in Readlater?" — confirm.) Google does not allow its sign-in
+- **Continue with Google** opens your browser at `<your site>/app-login`. Sign in there and tap
+  *Sign in to the app as …*; the page creates a one-time code and sends you back to the app via
+  `readlater://login?code=…`, which signs the app in. The code only works together with a secret the app
+  kept when it opened the page, and the app ignores sign-in links it did not ask for. (Some browsers ask "Open in Readlater?" — confirm.) Google does not allow its sign-in
   inside embedded web views, which is why the browser is used.
 - **Enter code from another device**: on a signed-in device open *Settings → Link a device*, then type
   the 8-character code (or scan the QR code with the device's camera, which opens `/link?code=…`).

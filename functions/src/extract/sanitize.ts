@@ -21,7 +21,12 @@ export const ALLOWED_ATTR = [
   'href', 'src', 'alt', 'title', 'colspan', 'rowspan', 'start', 'reversed', 'open', 'dir',
   'data-page', 'data-chapter', 'display', 'mathvariant', 'stretchy', 'fence', 'separator', 'accent',
   'columnalign', 'rowalign', 'lspace', 'rspace', 'linethickness', 'notation',
+  // Only kept as `<p class="rl-note">` (extractor notes such as "Loaded from the Internet Archive"); see sanitizeHtml.
+  'class',
 ];
+
+/** The only class that survives sanitisation, and only on <p>. */
+export const NOTE_CLASS = 'rl-note';
 
 /** Elements removed together with their content (the rest are unwrapped when not allowed). */
 const DROP_WITH_CONTENT = [
@@ -257,6 +262,10 @@ export function sanitizeHtml(html: string, baseUrl?: string): string {
   for (const img of Array.from(body.querySelectorAll('img'))) {
     const src = img.getAttribute('src');
     if (!src || !/^https?:\/\//i.test(src)) img.remove();
+  }
+  for (const el of Array.from(body.querySelectorAll('[class]'))) {
+    if (el.tagName === 'P' && (el.getAttribute('class') ?? '').trim() === NOTE_CLASS) el.setAttribute('class', NOTE_CLASS);
+    else el.removeAttribute('class');
   }
   for (const el of Array.from(body.querySelectorAll('[src],[href]'))) {
     for (const attr of ['src', 'href']) {

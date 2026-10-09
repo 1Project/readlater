@@ -7,6 +7,8 @@
 # Targets default to firestore,storage,functions,hosting.
 # The web build uses web/.env.production (written by scripts/setup.sh) when present; without it the
 # hosted app reads its Firebase config from /__/firebase/init.json, which Hosting serves automatically.
+# Optional integrations are configured in functions/.env.<project> (scripts/setup.sh writes it); after a
+# functions deploy with the Telegram bot switched on, the bot's webhook is (re-)registered.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -19,7 +21,7 @@ while [[ $# -gt 0 ]]; do
     --project|-p) PROJECT="${2:?--project needs a value}"; shift 2 ;;
     --only) ONLY="${2:?--only needs a value}"; shift 2 ;;
     --skip-install) SKIP_INSTALL=1; shift ;;
-    -h|--help) sed -n '2,10p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
     *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
 done
@@ -75,6 +77,29 @@ if ! "${FIREBASE[@]}" deploy --only "$ONLY" --project "$PROJECT" --force --non-i
     "${FIREBASE[@]}" deploy --only "$ONLY" --project "$PROJECT" --force --non-interactive
   else
     exit 1
+  fi
+fi
+
+# Telegram: point the bot at the deployed `telegram` function (idempotent; also sets the bot's command list).
+# The function checks the webhook secret, so it is read from Secret Manager and sent as the header.
+FUNCTIONS_ENV="$ROOT/functions/.env.$PROJECT"
+if [[ ",$ONLY," == *",functions"* && -f "$FUNCTIONS_ENV" ]] && grep -qE '^TELEGRAM_BOT_USERNAME=.+' "$FUNCTIONS_ENV"; then
+  say "Registering the Telegram webhook"
+  TG_SECRET="$({ "${FIREBASE[@]}" functions:secrets:access TELEGRAM_WEBHOOK_SECRET --project "$PROJECT" 2>/dev/null || true; } | tr -d '\r\n')"
+  if [[ -z "$TG_SECRET" ]]; then
+    echo "Warning: could not read TELEGRAM_WEBHOOK_SECRET; run scripts/setup.sh to set up the Telegram bot." >&2
+  else
+    [[ -z "${GITHUB_ACTIONS:-}" ]] || echo "::add-mask::$TG_SECRET"
+    TG_URL="https://us-central1-$PROJECT.cloudfunctions.net/telegram?action=setWebhook"
+    TG_OUT=""
+    for attempt in 1 2 3; do
+      if TG_OUT="$(curl -sS --max-time 60 --fail-with-body -H "X-Telegram-Bot-Api-Secret-Token: $TG_SECRET" "$TG_URL" 2>&1)"; then
+        echo "Webhook registered: $TG_OUT"
+        break
+      fi
+      [[ "$attempt" -eq 3 ]] || { echo "Not ready yet ($TG_OUT); retrying in 20 seconds…"; sleep 20; }
+    done
+    [[ "$TG_OUT" == *'"ok":true'* ]] || echo "Warning: the Telegram webhook was not registered: $TG_OUT" >&2
   fi
 fi
 

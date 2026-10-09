@@ -107,14 +107,22 @@ describe('native.ts on the web', () => {
 });
 
 describe('native.ts in the app', () => {
-  it('redeems readlater://login codes once and goes home', async () => {
+  it('redeems readlater://login codes once, with the verifier of the sign-in it started, and goes home', async () => {
+    localStorage.clear();
     const native = await load();
     const navigate = vi.fn();
     native.initNative(navigate);
     await flush();
+    await native.nativeGoogleSignIn();
+    const opened = new URL((h.browserOpen.mock.calls[0] as unknown as [{ url: string }])[0].url);
+    const challenge = opened.searchParams.get('challenge')!;
     h.state.appUrlListener!({ url: 'readlater://login?code=ABCD-2345' });
     await flush();
-    expect(h.redeemLoginCode).toHaveBeenCalledWith('ABCD-2345');
+    await flush();
+    expect(h.redeemLoginCode).toHaveBeenCalledWith('ABCD-2345', expect.any(String));
+    const verifier = (h.redeemLoginCode.mock.calls[0] as unknown as [string, string])[1];
+    expect(verifier).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(await native.pkceChallenge(verifier)).toBe(challenge);
     expect(navigate).toHaveBeenCalledWith('/');
     h.state.appUrlListener!({ url: 'readlater://login?code=ABCD-2345' });
     h.state.appUrlListener!({ url: 'content://downloads/1' });
@@ -122,13 +130,49 @@ describe('native.ts in the app', () => {
     expect(h.redeemLoginCode).toHaveBeenCalledTimes(1);
   });
 
-  it('sends a failed sign-in back to the login page', async () => {
-    h.redeemLoginCode.mockRejectedValueOnce(new Error('Invalid or expired code'));
+  it('ignores login links when the app did not start a sign-in (no silent account switch)', async () => {
+    localStorage.clear();
     const native = await load();
     const navigate = vi.fn();
     native.initNative(navigate);
     await flush();
+    h.state.appUrlListener!({ url: 'readlater://login?code=EVIL-2345' });
+    await flush();
+    expect(h.redeemLoginCode).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+    // A sign-in started long ago has expired as well.
+    localStorage.setItem('rl.nativeSignIn', JSON.stringify({ verifier: 'v'.repeat(43), at: Date.now() - 60 * 60_000 }));
+    h.state.appUrlListener!({ url: 'readlater://login?code=LATE-2345' });
+    await flush();
+    expect(h.redeemLoginCode).not.toHaveBeenCalled();
+  });
+
+  it('stays on /login after signing in, so the page continues to its `next`', async () => {
+    localStorage.clear();
+    window.history.replaceState(null, '', '/login?next=%2Fadd%3Furl%3Dx');
+    const native = await load();
+    const navigate = vi.fn();
+    native.initNative(navigate);
+    await flush();
+    await native.nativeGoogleSignIn();
+    h.state.appUrlListener!({ url: 'readlater://login?code=NEXT-2345' });
+    await flush();
+    await flush();
+    expect(h.redeemLoginCode).toHaveBeenCalledTimes(1);
+    expect(navigate).not.toHaveBeenCalled();
+    window.history.replaceState(null, '', '/');
+  });
+
+  it('sends a failed sign-in back to the login page', async () => {
+    h.redeemLoginCode.mockRejectedValueOnce(new Error('Invalid or expired code'));
+    localStorage.clear();
+    const native = await load();
+    const navigate = vi.fn();
+    native.initNative(navigate);
+    await flush();
+    await native.nativeGoogleSignIn();
     h.state.appUrlListener!({ url: 'readlater://login?code=ZZZZ' });
+    await flush();
     await flush();
     expect(navigate).toHaveBeenCalledWith('/login');
     expect(h.toast).toHaveBeenCalledWith(expect.stringContaining('Invalid or expired code'), { error: true });
@@ -141,6 +185,9 @@ describe('native.ts in the app', () => {
     native.initNative(navigate);
     await flush();
     expect(navigate).toHaveBeenCalledWith(`/add?url=${encodeURIComponent('https://example.com/post?a=1')}&title=A%20post`);
+    // /add may save it without asking (that URL only).
+    expect(native.takeTrustedShare('https://other.example/')).toBe(false);
+    expect(native.takeTrustedShare('https://example.com/post?a=1')).toBe(true);
 
     h.state.sharedListener!({ type: 'text', text: 'just a thought' });
     await flush();
@@ -163,6 +210,22 @@ describe('native.ts in the app', () => {
     vi.unstubAllGlobals();
   });
 
+  it('refuses a shared file whose bytes do not match its declared type', async () => {
+    const blob = new Blob(['SQLite format 3\u0000'], { type: 'application/pdf' });
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, blob: async () => blob })));
+    h.state.pending = { type: 'file', name: 'cache.pdf', mimeType: 'application/pdf', path: '/data/cache/shared/2/cache.pdf', size: 16 };
+    const native = await load();
+    native.initNative(vi.fn());
+    await flush();
+    await flush();
+    expect(h.uploadFile).not.toHaveBeenCalled();
+    expect(h.toast).toHaveBeenCalledWith(expect.stringContaining('not a PDF or EPUB'), { error: true });
+    vi.unstubAllGlobals();
+    const epub = new Blob([new Uint8Array([0x50, 0x4b, 3, 4, ...new Array(26).fill(0)]), 'mimetypeapplication/epub+zip']);
+    expect(await native.looksLike(epub, 'application/epub+zip')).toBe(true);
+    expect(await native.looksLike(epub, 'application/pdf')).toBe(false);
+  });
+
   it('mirrors window.__readerActive to the native plugin', async () => {
     const native = await load();
     native.initNative(vi.fn());
@@ -176,11 +239,11 @@ describe('native.ts in the app', () => {
     expect(h.plugin.setReaderActive).toHaveBeenCalledTimes(3);
   });
 
-  it('opens the Google sign-in hand-off in the system browser', async () => {
+  it('opens the Google sign-in hand-off in the system browser, with a PKCE challenge', async () => {
     const native = await load();
     await native.nativeGoogleSignIn();
     expect(h.browserOpen).toHaveBeenCalledWith({
-      url: 'https://readlater.example/app-login?return=readlater%3A%2F%2Flogin',
+      url: expect.stringMatching(/^https:\/\/readlater\.example\/app-login\?return=readlater%3A%2F%2Flogin&challenge=[A-Za-z0-9_-]{43}$/),
     });
   });
 });

@@ -77,7 +77,7 @@ function AddFeedForm({ tagSuggestions }: { tagSuggestions: string[] }) {
           autoCapitalize="off"
           autoCorrect="off"
           spellCheck={false}
-          placeholder="Site or feed address, e.g. example.com"
+          placeholder="Site or feed address"
           value={url}
           disabled={busy}
           onChange={(e) => setUrl(e.target.value)}

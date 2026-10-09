@@ -1,10 +1,11 @@
-/** YouTube / Vimeo: oEmbed metadata + description from the watch page when available. */
+/** YouTube / Vimeo: oEmbed metadata + description from the watch page when available; YouTube transcripts. */
 import { fetchJson, fetchText } from '../http';
 import { collapseWs, escapeHtml, parseHtml, textToHtml, toDate } from './html';
 import { extractMeta } from './meta';
 import { sanitizeHtml } from './sanitize';
 import { finalize } from './text';
 import type { Extracted } from './types';
+import { fetchTranscript, parsePlayerResponse, transcriptHtml, type PlayerInfo, type Transcript } from './youtube';
 
 export interface VideoRef {
   provider: 'youtube' | 'vimeo';
@@ -37,7 +38,7 @@ export function parseVideoUrl(input: string): VideoRef | null {
   return null;
 }
 
-interface OEmbed {
+export interface OEmbed {
   title?: string;
   author_name?: string;
   author_url?: string;
@@ -63,8 +64,18 @@ export function parseYouTubePage(html: string): { description: string | null; pu
   return { description: description?.trim() || null, publishedAt: toDate(d ?? null) };
 }
 
-/** Build the video item from oEmbed + optional page data. Pure. */
-export function buildVideo(ref: VideoRef, o: OEmbed, page: { description: string | null; publishedAt: Date | null }): Extracted {
+export interface PageInfo {
+  description: string | null;
+  publishedAt: Date | null;
+  /** YouTube player data (title, author, caption tracks) when the watch page had it. */
+  player?: PlayerInfo | null;
+}
+
+/**
+ * Build the video item from oEmbed + optional page data: thumbnail, description, then the transcript
+ * (YouTube) as timestamped paragraphs. Pure.
+ */
+export function buildVideo(ref: VideoRef, o: OEmbed, page: PageInfo, transcript: Transcript | null = null): Extracted {
   const provider = ref.provider === 'youtube' ? 'YouTube' : 'Vimeo';
   const title = collapseWs(o.title) || `${provider} video`;
   const thumb = o.thumbnail_url && /^https?:\/\//.test(o.thumbnail_url) ? o.thumbnail_url : null;
@@ -76,6 +87,7 @@ export function buildVideo(ref: VideoRef, o: OEmbed, page: { description: string
       `</figcaption></figure>`,
   ];
   if (desc) parts.push(textToHtml(desc));
+  if (transcript && ref.provider === 'youtube') parts.push(transcriptHtml(ref.id, transcript));
   return finalize({
     type: 'video',
     html: sanitizeHtml(parts.join('')),
@@ -89,36 +101,71 @@ export function buildVideo(ref: VideoRef, o: OEmbed, page: { description: string
   });
 }
 
-async function pageInfo(ref: VideoRef): Promise<{ description: string | null; publishedAt: Date | null }> {
+/** oEmbed-like metadata from the YouTube player response (when oEmbed itself is unavailable). Pure. */
+export function oembedFromPlayer(ref: VideoRef, p: PlayerInfo | null | undefined): OEmbed | null {
+  if (!p?.title) return null;
+  return {
+    title: p.title,
+    author_name: p.author ?? undefined,
+    author_url: p.channelUrl ?? undefined,
+    thumbnail_url: p.thumbnailUrl ?? `https://i.ytimg.com/vi/${ref.id}/hqdefault.jpg`,
+    provider_name: 'YouTube',
+  };
+}
+
+/** Description, date and (YouTube) player data from a watch page's HTML. Pure. */
+export function pageInfoFromHtml(ref: VideoRef, html: string, url: string): PageInfo | null {
+  if (ref.provider === 'youtube') {
+    const player = parsePlayerResponse(html, ref.id);
+    if (player) return { description: player.description, publishedAt: player.publishedAt, player };
+    // A page for another video (captured after in-app navigation) tells us nothing about this one.
+    if (/ytInitialPlayerResponse/.test(html)) return null;
+    const yt = parseYouTubePage(html);
+    if (yt.description || yt.publishedAt) return yt;
+  }
+  const dom = parseHtml(html, url);
   try {
-    const r = await fetchText(ref.url, { timeoutMs: 15_000 });
-    const host = new URL(r.url).hostname;
-    if (!/(youtube\.com|vimeo\.com)$/.test(host)) return { description: null, publishedAt: null }; // consent / captcha page
-    if (ref.provider === 'youtube') {
-      const yt = parseYouTubePage(r.text);
-      if (yt.description || yt.publishedAt) return yt;
-    }
-    const dom = parseHtml(r.text, r.url);
-    try {
-      const meta = extractMeta(dom.window.document, r.url);
-      return { description: meta.description, publishedAt: meta.publishedAt };
-    } finally {
-      dom.window.close();
-    }
-  } catch {
-    return { description: null, publishedAt: null };
+    const meta = extractMeta(dom.window.document, url);
+    return { description: meta.description, publishedAt: meta.publishedAt };
+  } finally {
+    dom.window.close();
   }
 }
 
-export async function extractVideo(ref: VideoRef): Promise<Extracted> {
+const NO_PAGE: PageInfo = { description: null, publishedAt: null, player: null };
+
+async function pageInfo(ref: VideoRef, pageHtml?: string): Promise<PageInfo> {
+  if (pageHtml) {
+    const fromCapture = pageInfoFromHtml(ref, pageHtml, ref.url);
+    if (fromCapture && (ref.provider !== 'youtube' || fromCapture.player)) return fromCapture;
+  }
+  try {
+    const r = await fetchText(ref.url, { timeoutMs: 15_000 });
+    const host = new URL(r.url).hostname;
+    if (!/(youtube\.com|vimeo\.com)$/.test(host)) return NO_PAGE; // consent / captcha page
+    return pageInfoFromHtml(ref, r.text, r.url) ?? NO_PAGE;
+  } catch {
+    return NO_PAGE;
+  }
+}
+
+/**
+ * Extract a YouTube/Vimeo video. `pageHtml` is a watch page captured by the browser extension; it is used
+ * instead of fetching the page when it belongs to this video.
+ */
+export async function extractVideo(ref: VideoRef, opts: { pageHtml?: string } = {}): Promise<Extracted> {
   const endpoint =
     ref.provider === 'youtube'
       ? `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(ref.url)}`
       : `https://vimeo.com/api/oembed.json?url=${encodeURIComponent(ref.url)}`;
-  const [o, page] = await Promise.all([
+  const [o, { page, transcript }] = await Promise.all([
     fetchJson<OEmbed>(endpoint).catch(() => null),
-    pageInfo(ref),
+    pageInfo(ref, opts.pageHtml).then(async (page) => ({
+      page,
+      transcript: ref.provider === 'youtube' ? await fetchTranscript(ref.id, page.player?.tracks ?? []).catch(() => null) : null,
+    })),
   ]);
-  if (!o) throw new Error('This video is unavailable (private, removed or embedding disabled)');
-  return buildVideo(ref, o, page);
+  const meta = o ?? oembedFromPlayer(ref, page.player);
+  if (!meta) throw new Error('This video is unavailable (private, removed or embedding disabled)');
+  return buildVideo(ref, meta, page, transcript);
 }

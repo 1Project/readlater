@@ -9,6 +9,7 @@ import {
   capNewEntries,
   feedItemId,
   feedItemType,
+  firstFetchLeftovers,
   isDue,
   planFeedItem,
   selectNewEntries,
@@ -165,5 +166,47 @@ describe('isDue', () => {
     expect(isDue(null, now)).toBe(true);
     expect(isDue(new Date(now - 44 * 60_000), now)).toBe(false);
     expect(isDue(new Date(now - 46 * 60_000), now)).toBe(true);
+  });
+});
+
+describe('first-fetch backlog (later refreshes must not add what the first fetch skipped)', () => {
+  // 60 posts, one every 12 hours: the first fetch takes the newest 20.
+  const HALF_DAY = 0.5;
+  const entries = Array.from({ length: 60 }, (_, i) => entry(i, i * HALF_DAY));
+
+  it('a second fetch with no new posts adds nothing once the watermark and seen ids are applied', () => {
+    const first = selectNewEntries('F', entries, { firstFetch: true, now: NOW });
+    expect(first).toHaveLength(20);
+    const { since, rest } = firstFetchLeftovers('F', entries, NOW);
+    expect(since?.getTime()).toBe(NOW.getTime() - 19 * HALF_DAY * DAY);
+    expect(rest).toEqual([]); // every skipped entry is dated and older than the watermark
+    const existing = new Set(first.map((c) => c.id));
+    const second = selectNewEntries('F', entries, { firstFetch: false, now: new Date(NOW.getTime() + 3_600_000), existing, since });
+    expect(second).toEqual([]);
+    // Without the watermark the bug reappears (40 old posts).
+    expect(selectNewEntries('F', entries, { firstFetch: false, now: NOW, existing })).toHaveLength(40);
+  });
+
+  it('new posts after the first fetch are still added', () => {
+    const { since } = firstFetchLeftovers('F', entries, NOW);
+    const later = new Date(NOW.getTime() + DAY);
+    const fresh = entry(100, -0.5); // published half a day after NOW
+    const existing = new Set(selectNewEntries('F', entries, { firstFetch: true, now: NOW }).map((c) => c.id));
+    const sel = selectNewEntries('F', [fresh, ...entries], { firstFetch: false, now: later, existing, since });
+    expect(sel.map((c) => c.entry.guid)).toEqual(['guid-100']);
+  });
+
+  it('undated skipped entries are returned to be marked as seen (they have no date to compare)', () => {
+    const undated = Array.from({ length: 30 }, (_, i) => entry(i, null));
+    const { since, rest } = firstFetchLeftovers('F', undated, NOW);
+    expect(since).toBeNull();
+    expect(rest.map((c) => c.entry.guid)).toEqual(undated.slice(20).map((e) => e.guid));
+    const existing = new Set(selectNewEntries('F', undated, { firstFetch: true, now: NOW }).map((c) => c.id));
+    for (const c of rest) existing.add(c.id);
+    expect(selectNewEntries('F', undated, { firstFetch: false, now: NOW, existing })).toEqual([]);
+  });
+
+  it('nothing is left behind when the feed fits the first fetch', () => {
+    expect(firstFetchLeftovers('F', entries.slice(0, 20), NOW)).toEqual({ since: null, rest: [] });
   });
 });

@@ -1,13 +1,18 @@
-/** Feed: items from subscribed RSS/Atom feeds (location 'feed'). New / Seen tabs, filter by feed and category. */
+/**
+ * Feed: items from subscribed RSS/Atom feeds and email newsletters (location 'feed'). New / Seen tabs, filter by
+ * feed and category, bulk select.
+ */
 import { useMemo, useState } from 'react';
 import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router';
+import BulkBar, { SelectToggle, useSelection } from '../components/BulkActions';
 import CategorySelect from '../components/CategorySelect';
 import EmptyState from '../components/EmptyState';
 import { Check, Refresh, Rss } from '../components/Icons';
 import ItemList from '../components/ItemList';
 import { useToast } from '../components/Toast';
 import { useConfirm } from '../components/useConfirm';
-import { bulkUpdate, refreshFeeds, useCategories, useFeeds, useItems } from '../lib/data';
+import { useConfig } from '../lib/config';
+import { bulkUpdate, refreshFeeds, tagCounts, useCategories, useFeeds, useItems } from '../lib/data';
 import { FEED_VIEWS, filterItems, parseFeedView, sortItems } from '../lib/filters';
 import type { Item } from '../lib/types';
 import './pages.css';
@@ -20,6 +25,7 @@ export default function Feed() {
   const categories = useCategories();
   const toast = useToast();
   const confirm = useConfirm();
+  const config = useConfig();
   const [refreshing, setRefreshing] = useState(false);
 
   const view = parseFeedView(params.get('view'));
@@ -81,11 +87,16 @@ export default function Feed() {
   }
 
   const open = (item: Item) => void navigate(`/item/${encodeURIComponent(item.id)}`);
-  const noFeeds = feeds !== undefined && feeds.length === 0;
+  const selection = useSelection(list, params.toString());
+  const tagSuggestions = useMemo(() => tagCounts(items ?? []).map((t) => t.tag), [items]);
+  // Newsletters (inbound email) land here too, so the "No feeds yet" start screen shows only while the Feed is empty.
+  const noFeeds = feeds !== undefined && feeds.length === 0 && feedItems !== undefined && feedItems.length === 0;
+  const hasFeeds = !!feeds && feeds.length > 0;
   const filtered = !!(feedId || cat);
 
   return (
     <main className="page feed-page">
+      <h1 className="visually-hidden">Feed</h1>
       <div className="page-head">
         <nav className="tabs" aria-label="Feed views">
           {FEED_VIEWS.map((v) => (
@@ -109,15 +120,17 @@ export default function Feed() {
 
       {!noFeeds ? (
         <div className="filters">
-          <select className="select filter-select" value={feedId ?? ''} aria-label="Filter by feed" onChange={(e) => update({ feed: e.target.value || null })}>
-            <option value="">All feeds</option>
-            {sortedFeeds.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.title || f.url}
-                {newPerFeed.get(f.id) ? ` (${newPerFeed.get(f.id)})` : ''}
-              </option>
-            ))}
-          </select>
+          {hasFeeds ? (
+            <select className="select filter-select" value={feedId ?? ''} aria-label="Filter by feed" onChange={(e) => update({ feed: e.target.value || null })}>
+              <option value="">All feeds</option>
+              {sortedFeeds.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.title || f.url}
+                  {newPerFeed.get(f.id) ? ` (${newPerFeed.get(f.id)})` : ''}
+                </option>
+              ))}
+            </select>
+          ) : null}
           <CategorySelect className="filter-select" value={cat} onChange={(id) => update({ cat: id })} categories={categories} includeAll aria-label="Filter by category" />
         </div>
       ) : null}
@@ -131,11 +144,12 @@ export default function Feed() {
             <button type="button" className="btn btn-ghost btn-small" onClick={() => void refresh()} disabled={refreshing}>
               <Refresh /> {refreshing ? 'Checking…' : 'Refresh'}
             </button>
-            {view === 'new' && list.length ? (
+            {view === 'new' && list.length && !selection.active ? (
               <button type="button" className="btn btn-small" onClick={() => void markAllSeen()}>
                 <Check /> Mark all as seen
               </button>
             ) : null}
+            {list.length ? <SelectToggle selection={selection} /> : null}
           </div>
         </div>
       ) : null}
@@ -151,6 +165,11 @@ export default function Feed() {
           }
         >
           <p>Follow blogs, newsletters and sites with RSS. New posts show up here; save the ones you want to read to your library.</p>
+          {config.inboundEmailDomain ? (
+            <p>
+              Newsletters can come here too: subscribe with <RouterLink to="/settings#email">your Readlater email address</RouterLink>.
+            </p>
+          ) : null}
         </EmptyState>
       ) : list && list.length === 0 ? (
         filtered ? (
@@ -174,8 +193,18 @@ export default function Feed() {
           </EmptyState>
         )
       ) : (
-        <ItemList items={list} categories={categories} emptyText="No items" onOpen={open} resetKey={params.toString()} />
+        <ItemList
+          items={list}
+          categories={categories}
+          emptyText="No items"
+          onOpen={open}
+          resetKey={params.toString()}
+          selectable={selection.active}
+          checkedIds={selection.checkedIds}
+          onCheck={selection.toggle}
+        />
       )}
+      {selection.active && list?.length && !noFeeds ? <BulkBar selection={selection} categories={categories} tagSuggestions={tagSuggestions} context="feed" /> : null}
     </main>
   );
 }

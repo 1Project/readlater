@@ -3,17 +3,21 @@
  *
  * Exports:
  *   HighlightsPanel   { open, onClose, highlights: Highlight[] (document order), missing: Set<string>,
- *                       onJump(id), onEdit(id) }        "Highlights (n)" list with jump-to
+ *                       onJump(id), onEdit(id), onCopyMarkdown() }
+ *                                                       "Highlights (n)" list with jump-to and "Copy as Markdown"
  *   ContentsPanel     { open, onClose, chapters: Chapter[], onJump(index) }   EPUB table of contents
- *   HighlightDialog   { highlight: Highlight | null, onClose }                 edit note / delete
- *   NewNoteDialog     { quote: string | null, onClose, onSave(note) }          note for a new highlight
+ *   HighlightDialog   { highlight: Highlight | null, onClose }                 edit note / colour, delete
+ *   NewNoteDialog     { quote: string | null, color: HighlightColor, onClose, onSave(note, color) }
+ *                                                                            note for a new highlight
  *   type Chapter = { title: string; el: Element }
  */
 import { useId, useState } from 'react';
 import Dialog from '../components/Dialog';
 import { toast } from '../components/Toast';
-import { deleteHighlight, updateHighlightNote } from '../lib/data';
-import type { Highlight } from '../lib/types';
+import { deleteHighlight, updateHighlightColor, updateHighlightNote } from '../lib/data';
+import type { Highlight, HighlightColor } from '../lib/types';
+import { ColorPicker, normalizeColor, writeLastColor } from './HighlightColors';
+import { Copy } from './icons';
 
 export interface Chapter {
   title: string;
@@ -27,6 +31,7 @@ export function HighlightsPanel({
   missing,
   onJump,
   onEdit,
+  onCopyMarkdown,
 }: {
   open: boolean;
   onClose: () => void;
@@ -34,9 +39,22 @@ export function HighlightsPanel({
   missing: Set<string>;
   onJump: (id: string) => void;
   onEdit: (id: string) => void;
+  onCopyMarkdown: () => void;
 }) {
   return (
-    <Dialog open={open} onClose={onClose} title={`Highlights (${highlights.length})`} className="reader-list-dialog">
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title={`Highlights (${highlights.length})`}
+      className="reader-list-dialog"
+      footer={
+        highlights.length > 0 ? (
+          <button type="button" className="btn" onClick={onCopyMarkdown}>
+            <Copy size={18} /> Copy as Markdown
+          </button>
+        ) : undefined
+      }
+    >
       {highlights.length === 0 ? (
         <p className="muted">Select text in the article and choose “Highlight” to save a passage.</p>
       ) : (
@@ -46,7 +64,9 @@ export function HighlightsPanel({
             return (
               <li key={h.id} className="reader-hl-entry">
                 <button type="button" className="reader-hl-jump" disabled={lost} onClick={() => onJump(h.id)}>
-                  <span className="reader-hl-text">{h.text}</span>
+                  <span className="reader-hl-text" data-color={normalizeColor(h.color)}>
+                    {h.text}
+                  </span>
                   {h.note ? <span className="reader-hl-note">{h.note}</span> : null}
                   {lost ? <span className="small muted">Not found in the current text</span> : null}
                 </button>
@@ -84,12 +104,14 @@ export function ContentsPanel({ open, onClose, chapters, onJump }: { open: boole
 
 export function HighlightDialog({ highlight, onClose }: { highlight: Highlight | null; onClose: () => void }) {
   const [note, setNote] = useState('');
+  const [color, setColor] = useState<HighlightColor>('yellow');
   const [forId, setForId] = useState<string | null>(null);
   const fieldId = useId();
   // (Re)initialise when a different highlight is opened.
   if (highlight && highlight.id !== forId) {
     setForId(highlight.id);
     setNote(highlight.note);
+    setColor(normalizeColor(highlight.color));
   }
   if (!highlight && forId !== null) setForId(null);
 
@@ -97,6 +119,10 @@ export function HighlightDialog({ highlight, onClose }: { highlight: Highlight |
     if (!highlight) return;
     if (note.trim() !== highlight.note.trim()) {
       updateHighlightNote(highlight.id, note.trim()).catch((e: unknown) => toast(`Could not save the note: ${(e as Error).message}`, { error: true }));
+    }
+    if (color !== normalizeColor(highlight.color)) {
+      writeLastColor(color);
+      updateHighlightColor(highlight.id, color).catch((e: unknown) => toast(`Could not change the colour: ${(e as Error).message}`, { error: true }));
     }
     onClose();
   };
@@ -131,7 +157,13 @@ export function HighlightDialog({ highlight, onClose }: { highlight: Highlight |
     >
       {highlight ? (
         <div className="form-stack">
-          <blockquote className="reader-quote">{highlight.text}</blockquote>
+          <blockquote className="reader-quote" data-color={color}>
+            {highlight.text}
+          </blockquote>
+          <div className="field">
+            <span className="field-label">Colour</span>
+            <ColorPicker value={color} onChange={setColor} />
+          </div>
           <label className="field" htmlFor={fieldId}>
             <span className="field-label">Note</span>
             <textarea id={fieldId} className="textarea" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add a note…" maxLength={5000} />
@@ -142,20 +174,32 @@ export function HighlightDialog({ highlight, onClose }: { highlight: Highlight |
   );
 }
 
-export function NewNoteDialog({ quote, onClose, onSave }: { quote: string | null; onClose: () => void; onSave: (note: string) => void }) {
+export function NewNoteDialog({
+  quote,
+  color: initialColor,
+  onClose,
+  onSave,
+}: {
+  quote: string | null;
+  color: HighlightColor;
+  onClose: () => void;
+  onSave: (note: string, color: HighlightColor) => void;
+}) {
   const [note, setNote] = useState('');
+  const [color, setColor] = useState<HighlightColor>(initialColor);
   const [forQuote, setForQuote] = useState<string | null>(null);
   const fieldId = useId();
   if (quote !== forQuote) {
     setForQuote(quote);
     setNote('');
+    setColor(initialColor);
   }
   return (
     <Dialog
       open={quote !== null}
       onClose={onClose}
       title="Highlight with note"
-      onSubmit={() => onSave(note.trim())}
+      onSubmit={() => onSave(note.trim(), color)}
       footer={
         <>
           <button type="button" className="btn" onClick={onClose}>
@@ -168,7 +212,13 @@ export function NewNoteDialog({ quote, onClose, onSave }: { quote: string | null
       }
     >
       <div className="form-stack">
-        <blockquote className="reader-quote">{quote}</blockquote>
+        <blockquote className="reader-quote" data-color={color}>
+          {quote}
+        </blockquote>
+        <div className="field">
+          <span className="field-label">Colour</span>
+          <ColorPicker value={color} onChange={setColor} />
+        </div>
         <label className="field" htmlFor={fieldId}>
           <span className="field-label">Note</span>
           <textarea id={fieldId} className="textarea" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Why does this matter?" maxLength={5000} />

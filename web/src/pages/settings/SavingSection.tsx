@@ -1,5 +1,6 @@
-/** Settings › Saving from anywhere: API keys, bookmarklet, iOS Shortcut, curl and Android instructions. */
-import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent } from 'react';
+/** Settings › Saving from anywhere: API keys, iOS Shortcut, curl and Android instructions (bookmarklets: BookmarkletsSection). */
+import { useState, type FormEvent } from 'react';
+import { Link as RouterLink } from 'react-router';
 import { Trash } from '../../components/Icons';
 import Spinner from '../../components/Spinner';
 import { useToast } from '../../components/Toast';
@@ -8,55 +9,7 @@ import { createApiKey, revokeApiKey, useApiKeys } from '../../lib/data';
 import { publicUrl } from '../../lib/firebase';
 import { formatDate, relativeTime } from '../../lib/format';
 import type { ApiKeyInfo } from '../../lib/types';
-import { copyText } from './download';
-import { errorMessage, Section } from './ui';
-
-function bookmarkletCode(base: string): string {
-  return (
-    `javascript:(function(){var u=${JSON.stringify(`${base}/add?url=`)}+encodeURIComponent(location.href)+'&title='+encodeURIComponent(document.title);` +
-    `var w=window.open(u,'_blank');if(!w)location.href=u;})();`
-  );
-}
-
-function CopyButton({ text, label = 'Copy', what }: { text: string; label?: string; what: string }) {
-  const toast = useToast();
-  return (
-    <button
-      type="button"
-      className="btn btn-small"
-      onClick={() => void copyText(text).then((ok) => toast(ok ? `${what} copied` : 'Could not copy — select the text and copy it by hand', { error: !ok }))}
-    >
-      {label}
-    </button>
-  );
-}
-
-function Bookmarklet({ base }: { base: string }) {
-  const toast = useToast();
-  const ref = useRef<HTMLAnchorElement>(null);
-  const code = useMemo(() => bookmarkletCode(base), [base]);
-  // React blocks javascript: URLs in JSX, so set the attribute directly.
-  useEffect(() => {
-    ref.current?.setAttribute('href', code);
-  }, [code]);
-  const onClick = (e: MouseEvent) => {
-    e.preventDefault();
-    toast('Drag this button to your bookmarks bar, then click it on any page you want to save.');
-  };
-  return (
-    <div className="set-sub">
-      <h3 className="set-sub-title">Bookmarklet</h3>
-      <p className="small">Drag this button to your browser’s bookmarks bar. Click it on any page to save that page (you need to be signed in here).</p>
-      <div className="row">
-        <a ref={ref} className="btn btn-primary set-bookmarklet" draggable onClick={onClick} title="Drag to your bookmarks bar">
-          Save to Readlater
-        </a>
-        <CopyButton text={code} label="Copy code" what="Bookmarklet code" />
-      </div>
-      <p className="small muted">On a phone: copy the code, bookmark any page, then edit that bookmark and paste the code as its address.</p>
-    </div>
-  );
-}
+import { CopyButton, errorMessage, Section } from './ui';
 
 function ApiKeys({ onCreated }: { onCreated: (key: string) => void }) {
   const keys = useApiKeys();
@@ -126,7 +79,8 @@ function ApiKeys({ onCreated }: { onCreated: (key: string) => void }) {
               <div className="set-list-main">
                 <span className="set-list-name">{k.name}</span>
                 <span className="small muted">
-                  <code>{k.prefix}…</code> · created {formatDate(k.createdAt)} · {k.lastUsedAt ? `last used ${relativeTime(k.lastUsedAt)}` : 'never used'}
+                  <code>{k.prefix}…</code>
+                  {k.scope === 'save' ? ' · can only save' : ''} · created {formatDate(k.createdAt)} · {k.lastUsedAt ? `last used ${relativeTime(k.lastUsedAt)}` : 'never used'}
                 </span>
               </div>
               <div className="set-list-actions">
@@ -152,9 +106,16 @@ export function SavingSection() {
   const getUrl = `${base}/api/save?key=${shownKey}&url=https%3A%2F%2Fexample.com%2Farticle`;
 
   return (
-    <Section id="saving" title="Saving from anywhere" intro="Save links from your browser, phone share sheet, scripts and automations.">
-      <Bookmarklet base={base} />
-
+    <Section
+      id="saving"
+      title="Saving from anywhere"
+      intro={
+        <>
+          Save links from your phone’s share sheet, scripts and automations. In a desktop browser, use the <RouterLink to={{ hash: '#extension' }}>browser extension</RouterLink> or a{' '}
+          <RouterLink to={{ hash: '#bookmarklets' }}>bookmarklet</RouterLink>.
+        </>
+      }
+    >
       <div className="set-sub">
         <h3 className="set-sub-title">Android</h3>
         <p className="small">
@@ -165,8 +126,8 @@ export function SavingSection() {
 
       <ApiKeys onCreated={setKey} />
 
-      <div className="set-sub">
-        <h3 className="set-sub-title">iPhone &amp; iPad (Shortcut)</h3>
+      <details className="set-sub set-details">
+        <summary className="set-sub-title">iPhone &amp; iPad (Shortcut)</summary>
         <ol className="set-steps small">
           <li>Create an API key above and copy it.</li>
           <li>
@@ -196,10 +157,10 @@ export function SavingSection() {
             Optionally add <strong>Show Notification</strong> “Saved”. Now use <strong>Share → Save to Readlater</strong> from Safari or any app.
           </li>
         </ol>
-      </div>
+      </details>
 
-      <div className="set-sub">
-        <h3 className="set-sub-title">From the command line or other tools</h3>
+      <details className="set-sub set-details">
+        <summary className="set-sub-title">From the command line or other tools</summary>
         <pre className="set-pre">
           <code>{curl}</code>
         </pre>
@@ -212,7 +173,7 @@ export function SavingSection() {
         <pre className="set-pre">
           <code>{getUrl}</code>
         </pre>
-      </div>
+      </details>
     </Section>
   );
 }

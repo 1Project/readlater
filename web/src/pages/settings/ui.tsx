@@ -3,11 +3,15 @@
  *
  * Exports:
  *   Section({ id, title, intro?, children })                 <section id> with heading; target of the in-page index
- *   Segmented<T>({ value, options: {value,label,style?}[], onChange, label, big? })   row of pressed/unpressed buttons
+ *   Segmented<T>({ value, options: {value,label,style?}[], onChange, label, big?, wrap? })   row of pressed/unpressed buttons
+ *                                                            (wrap: up to 3 per row on narrow screens)
  *   Switch({ checked, onChange, label, description? })       full-width on/off row (role="switch")
+ *   CopyButton({ text, label?, what })                       copies text, toasts "<what> copied"
  *   errorMessage(e): string                                  readable text for a thrown error / callable error
  */
 import { useId, type CSSProperties, type ReactNode } from 'react';
+import { useToast } from '../../components/Toast';
+import { copyText } from './download';
 
 export function Section({ id, title, intro, children }: { id: string; title: string; intro?: ReactNode; children: ReactNode }) {
   const hid = `${id}-title`;
@@ -34,15 +38,17 @@ export function Segmented<T extends string>({
   onChange,
   label,
   big,
+  wrap,
 }: {
   value: T;
   options: SegmentedOption<T>[];
   onChange: (v: T) => void;
   label: string;
   big?: boolean;
+  wrap?: boolean;
 }) {
   return (
-    <div className={`set-seg${big ? ' set-seg-big' : ''}`} role="group" aria-label={label}>
+    <div className={`set-seg${big ? ' set-seg-big' : ''}${wrap ? ' set-seg-wrap' : ''}`} role="group" aria-label={label}>
       {options.map((o) => (
         <button key={o.value} type="button" className="btn set-seg-btn" aria-pressed={value === o.value} style={o.style} onClick={() => onChange(o.value)}>
           {o.label}
@@ -79,6 +85,19 @@ export function Switch({ checked, onChange, label, description }: { checked: boo
         <span className="set-switch-state">{checked ? 'On' : 'Off'}</span>
       </button>
     </div>
+  );
+}
+
+export function CopyButton({ text, label = 'Copy', what }: { text: string; label?: string; what: string }) {
+  const toast = useToast();
+  return (
+    <button
+      type="button"
+      className="btn btn-small"
+      onClick={() => void copyText(text).then((ok) => toast(ok ? `${what} copied` : 'Could not copy — select the text and copy it by hand', { error: !ok }))}
+    >
+      {label}
+    </button>
   );
 }
 

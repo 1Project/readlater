@@ -21,13 +21,17 @@
  *   parseSearchQuery(q): { terms: string[]; tags: string[] }   `#foo` terms only match tags
  *   scoreItem(item, query): number              0 = no match (every term must match somewhere)
  *   searchItems(items, q): Item[]               matches only, best first, ties newest first
+ *   LIBRARY_PARAMS                              query keys the Library understands (view, cat, tag, type, sort)
+ *   canonicalViewParams(params): string         Library query string with defaults dropped and keys sorted
+ *                                               (what a saved view stores, and how views are compared)
+ *   describeViewParams(params, categories?): string   readable name suggestion, e.g. "Archive · Essays · #ai"
  */
 import type { Item, ItemLocation, ItemType } from './types';
 
 export type LibraryView = 'unread' | 'archive' | 'favorites' | 'all';
 export type FeedView = 'new' | 'seen';
 export type TypeFilter = 'all' | Exclude<ItemType, 'other'>;
-export type SortKey = 'new' | 'old' | 'short' | 'long';
+export type SortKey = 'new' | 'old' | 'short' | 'long' | 'opened';
 export type SearchScope = 'all' | 'library' | 'feed' | 'archive';
 export type DateField = 'createdAt' | 'publishedAt' | 'archivedAt';
 
@@ -68,6 +72,7 @@ export const SORT_KEYS: { value: SortKey; label: string }[] = [
   { value: 'old', label: 'Oldest' },
   { value: 'short', label: 'Shortest' },
   { value: 'long', label: 'Longest' },
+  { value: 'opened', label: 'Recently opened' },
 ];
 
 export const SEARCH_SCOPES: { value: SearchScope; label: string }[] = [
@@ -157,6 +162,17 @@ export function sortItems(items: Item[], sort: SortKey, dateField: DateField = '
         if (la == null) return 1;
         if (lb == null) return -1;
         return (la - lb) * dir || byNew(a, b);
+      });
+    }
+    case 'opened': {
+      // "Continue reading": most recently opened first; never-opened items after them, newest first.
+      return out.sort((a, b) => {
+        const oa = millis(a.lastOpenedAt);
+        const ob = millis(b.lastOpenedAt);
+        if (oa == null && ob == null) return byNew(a, b);
+        if (oa == null) return 1;
+        if (ob == null) return -1;
+        return ob - oa || byNew(a, b);
       });
     }
   }
@@ -286,4 +302,89 @@ export function searchItems(items: Item[], q: string): Item[] {
   }
   scored.sort((a, b) => b.score - a.score || b.time - a.time || a.item.id.localeCompare(b.item.id));
   return scored.map((s) => s.item);
+}
+
+// ---------------------------------------------------------------------------
+// Saved views
+
+export const LIBRARY_PARAMS = ['view', 'cat', 'tag', 'type', 'sort'] as const;
+
+const PARAM_DEFAULTS: Record<string, string> = { view: 'unread', type: 'all', sort: 'new' };
+
+/** Keep only Library filter keys with non-default, valid values, sorted by key: `cat=…&tag=…&view=archive`. */
+export function canonicalViewParams(params: URLSearchParams | string): string {
+  const src = typeof params === 'string' ? new URLSearchParams(params.replace(/^\?/, '')) : params;
+  const out = new URLSearchParams();
+  for (const key of [...LIBRARY_PARAMS].sort()) {
+    const raw = src.get(key)?.trim();
+    if (!raw) continue;
+    let value: string = raw;
+    if (key === 'view') value = parseLibraryView(raw);
+    else if (key === 'type') value = parseTypeFilter(raw);
+    else if (key === 'sort') value = parseSort(raw);
+    if (value !== PARAM_DEFAULTS[key]) out.set(key, value);
+  }
+  return out.toString();
+}
+
+export function describeViewParams(params: URLSearchParams | string, categories: { id: string; name: string }[] = []): string {
+  const p = new URLSearchParams(canonicalViewParams(params));
+  const parts: string[] = [];
+  const view = p.get('view');
+  if (view) parts.push(LIBRARY_VIEWS.find((v) => v.value === view)?.label ?? view);
+  const cat = p.get('cat');
+  if (cat) parts.push(categories.find((c) => c.id === cat)?.name ?? 'Category');
+  const tag = p.get('tag');
+  if (tag) parts.push(`#${tag}`);
+  const type = p.get('type');
+  if (type) parts.push(TYPE_FILTERS.find((t) => t.value === type)?.label ?? type);
+  const sort = p.get('sort');
+  if (sort) parts.push(SORT_KEYS.find((x) => x.value === sort)?.label ?? sort);
+  return parts.join(' · ') || 'Unread';
+}
+
+// ---------------------------------------------------------------------------
+// Full-text snippets
+
+export interface Snippet {
+  before: string;
+  match: string;
+  after: string;
+}
+
+/**
+ * The first place in `text` where one of the (normalised) search `terms` occurs, with about `radius`
+ * characters of context on each side, cut at word boundaries and marked with "…" where cut. Matching ignores
+ * case and diacritics, the returned parts are the original text. null when no term occurs.
+ */
+export function textSnippet(text: string, terms: string[], radius = 80): Snippet | null {
+  if (!text || !terms.length) return null;
+  // Normalise character by character, remembering where each normalised char came from.
+  let norm = '';
+  const from: number[] = [];
+  for (let i = 0; i < text.length; i++) {
+    const n = normalizeText(text[i]) || (/\s/.test(text[i]) ? ' ' : '');
+    for (let k = 0; k < n.length; k++) {
+      norm += n[k];
+      from.push(i);
+    }
+  }
+  let best: { at: number; len: number } | null = null;
+  for (const t of terms) {
+    const at = norm.indexOf(t);
+    if (at >= 0 && (!best || at < best.at)) best = { at, len: t.length };
+  }
+  if (!best) return null;
+  const start = from[best.at];
+  const end = from[best.at + best.len - 1] + 1;
+  let a = Math.max(0, start - radius);
+  let b = Math.min(text.length, end + radius);
+  if (a > 0) a = text.indexOf(' ', a) + 1 || a;
+  if (b < text.length) b = text.lastIndexOf(' ', b) > end ? text.lastIndexOf(' ', b) : b;
+  const squash = (x: string) => x.replace(/\s+/g, ' ');
+  return {
+    before: (a > 0 ? '…' : '') + squash(text.slice(a, start)).trimStart(),
+    match: text.slice(start, end),
+    after: squash(text.slice(end, b)).trimEnd() + (b < text.length ? '…' : ''),
+  };
 }

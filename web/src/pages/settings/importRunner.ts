@@ -11,10 +11,9 @@
  */
 import { useSyncExternalStore } from 'react';
 import { toast } from '../../components/Toast';
-import { addUrl, updateItemLater } from '../../lib/data';
+import { addUrl } from '../../lib/data';
 import type { ImportEntry } from '../../lib/importers';
 import { getPrefs } from '../../lib/prefs';
-import type { ItemPatch } from '../../lib/types';
 
 export interface ImportProgress {
   label: string;
@@ -97,11 +96,15 @@ export function startImport(label: string, entries: ImportEntry[], opts: { dupli
     while (!cancelFlag && next < entries.length) {
       const e = entries[next++];
       try {
-        const id = await addUrl(e.url, { title: e.title, tags: e.tags });
-        const patch: ItemPatch = {};
-        if (e.archived || opts.archiveAll) patch.status = 'archived';
-        if (e.favorite) patch.favorite = true;
-        if (Object.keys(patch).length) updateItemLater(id, patch);
+        // Keep the original save date (Stats, save order) and archive / favorite in the same write.
+        await addUrl(e.url, {
+          title: e.title,
+          tags: e.tags,
+          source: 'import',
+          createdAt: e.addedAt ? new Date(e.addedAt) : undefined,
+          status: e.archived || opts.archiveAll ? 'archived' : undefined,
+          favorite: e.favorite || undefined,
+        });
         s.added++;
       } catch (err) {
         s.failed++;

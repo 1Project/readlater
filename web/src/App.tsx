@@ -5,11 +5,14 @@
  *   /  search      a  add      g l / g f / g s / g h / g p   go to Library / Feed / Search / Highlights / Settings (preferences)
  * Pasting a link anywhere outside a text field, or dropping a PDF/EPUB/link onto the page, opens the add dialog.
  *
+ * Public routes (no sign-in needed): /login, /link, /app-login and the shared-document page /s/:token, which is
+ * rendered without the top bar and without waiting for the auth state.
+ *
  * Other modules can open the add dialog with `window.dispatchEvent(new CustomEvent('readlater:add'))`
  * (optional `detail: { url?: string }`).
  */
 import { Component, lazy, Suspense, useCallback, useEffect, useRef, useState, type ErrorInfo, type ReactNode } from 'react';
-import { Navigate, NavLink, Route, Link as RouterLink, Routes, useLocation, useNavigate } from 'react-router';
+import { Navigate, NavLink, Route, Link as RouterLink, Routes, useLocation, useNavigate, useNavigationType } from 'react-router';
 import { getRedirectResult } from 'firebase/auth';
 import AddDialog from './components/AddDialog';
 import { Highlight, Inbox, Plus, Rss, Search as SearchIcon, Settings as SettingsIcon } from './components/Icons';
@@ -33,10 +36,18 @@ const Settings = lazy(() => import('./pages/Settings'));
 const Feeds = lazy(() => import('./pages/Feeds'));
 const Highlights = lazy(() => import('./pages/Highlights'));
 const Search = lazy(() => import('./pages/Search'));
+const Stats = lazy(() => import('./pages/Stats'));
+const Review = lazy(() => import('./pages/Review'));
+const SharePage = lazy(() => import('./pages/SharePage'));
 
 const ADD_EVENT = 'readlater:add';
 
 const PUBLIC_ROUTES = ['/login', '/link', '/app-login'];
+
+/** Public share links (`/s/:token`): readable by anyone, shown without any app chrome. */
+function isSharePath(pathname: string): boolean {
+  return /^\/s\/[^/]+\/?$/.test(pathname);
+}
 
 const NAV = [
   { to: '/', label: 'Library', icon: Inbox, end: true },
@@ -53,6 +64,8 @@ const TITLES: [RegExp, string][] = [
   [/^\/search$/, 'Search'],
   [/^\/highlights$/, 'Highlights'],
   [/^\/settings$/, 'Settings'],
+  [/^\/stats$/, 'Stats'],
+  [/^\/review$/, 'Daily review'],
   [/^\/login$/, 'Sign in'],
   [/^\/link$/, 'Link device'],
   [/^\/app-login$/, 'Sign in'],
@@ -95,11 +108,35 @@ function Shell() {
   }, []);
 
   const reader = isReaderPath(location.pathname);
+  const share = isSharePath(location.pathname);
+
+  // A page opened from a link starts at the top (client-side navigation keeps the previous page's scroll).
+  // Back and forward keep the browser's position, the reader restores the reading position itself, and a
+  // #section link scrolls to its section.
+  const navigationType = useNavigationType();
+  const lastPath = useRef(location.pathname);
   useEffect(() => {
-    if (reader) return; // the reader sets its own title
+    if (lastPath.current === location.pathname) return;
+    lastPath.current = location.pathname;
+    if (navigationType !== 'POP' && !reader && !location.hash) window.scrollTo(0, 0);
+  }, [location.pathname, location.hash, navigationType, reader]);
+  useEffect(() => {
+    if (reader || share) return; // the reader and the share page set their own titles
     const name = TITLES.find(([re]) => re.test(location.pathname))?.[1];
     document.title = name ? `${name} · Readlater` : 'Readlater';
-  }, [location.pathname, reader]);
+  }, [location.pathname, reader, share]);
+
+  if (share) {
+    return (
+      <ErrorBoundary resetKey={location.pathname}>
+        <Suspense fallback={<Spinner />}>
+          <Routes>
+            <Route path="/s/:token" element={<SharePage />} />
+          </Routes>
+        </Suspense>
+      </ErrorBoundary>
+    );
+  }
 
   if (user === undefined) {
     return <p className="app-loading">Loading…</p>;
@@ -127,6 +164,8 @@ function Shell() {
             <Route path="/highlights" element={<Highlights />} />
             <Route path="/item/:id" element={<Reader />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/stats" element={<Stats />} />
+            <Route path="/review" element={<Review />} />
             <Route path="/login" element={<Login />} />
             <Route path="/link" element={<Link />} />
             <Route path="/app-login" element={<AppLogin />} />

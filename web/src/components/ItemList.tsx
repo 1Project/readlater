@@ -12,10 +12,15 @@
  *   pageSize?: number                  default 50
  *   resetKey?: string                  when it changes (e.g. the filter query string) paging and selection reset
  *   keyboard?: boolean                 default true; set false when two lists share a page
+ *   selectable?: boolean               bulk-select mode (checkboxes on rows; see ItemRow); `x` toggles the selected row
+ *   checkedIds?: ReadonlySet<string>   checked rows in selectable mode
+ *   onCheck?: (item: Item, checked: boolean) => void
+ *   snippets?: ReadonlyMap<string, ReactNode>  per item id: shown instead of the excerpt (search: where the text matched)
  *
  * Keys (ignored while typing in a field, with modifier keys, or while a dialog is open):
  *   j / k  next / previous item      Enter / o  open selected
  *   e      archive / unarchive (feed: seen / new)      s  toggle favorite
+ *   x      check / uncheck the selected row (only in selectable mode)
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { usePrefs } from '../lib/prefs';
@@ -35,6 +40,10 @@ export interface ItemListProps {
   pageSize?: number;
   resetKey?: string;
   keyboard?: boolean;
+  selectable?: boolean;
+  checkedIds?: ReadonlySet<string>;
+  onCheck?: (item: Item, checked: boolean) => void;
+  snippets?: ReadonlyMap<string, ReactNode>;
 }
 
 export function isTypingTarget(t: EventTarget | null): boolean {
@@ -49,7 +58,20 @@ export function isTypingTarget(t: EventTarget | null): boolean {
   return false;
 }
 
-export function ItemList({ items, categories, emptyText, onOpen, compact, pageSize = 50, resetKey, keyboard = true }: ItemListProps) {
+export function ItemList({
+  items,
+  categories,
+  emptyText,
+  onOpen,
+  compact,
+  pageSize = 50,
+  resetKey,
+  keyboard = true,
+  selectable = false,
+  checkedIds,
+  onCheck,
+  snippets,
+}: ItemListProps) {
   const prefs = usePrefs();
   const isCompact = compact ?? prefs.listDensity === 'compact';
   const [limit, setLimit] = useState(pageSize);
@@ -77,8 +99,8 @@ export function ItemList({ items, categories, emptyText, onOpen, compact, pageSi
   }, [selectedId, selectedIndex, items]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Latest values for the global key handler without re-binding it on every render.
-  const state = useRef({ list, selectedIndex, onOpen });
-  state.current = { list, selectedIndex, onOpen };
+  const state = useRef({ list, selectedIndex, onOpen, selectable, checkedIds, onCheck });
+  state.current = { list, selectedIndex, onOpen, selectable, checkedIds, onCheck };
 
   // Keep the selected row visible and within the rendered page — only when the selection moves,
   // not on live list updates or "Show more".
@@ -107,7 +129,7 @@ export function ItemList({ items, categories, emptyText, onOpen, compact, pageSi
       if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
       if (isTypingTarget(e.target)) return;
       if (document.querySelector('.dialog-backdrop, .menu-list')) return;
-      const { list: l, selectedIndex: i, onOpen: open } = state.current;
+      const { list: l, selectedIndex: i, onOpen: open, selectable: selecting, checkedIds: checked, onCheck: check } = state.current;
       if (!l.length) return;
       const cur = i >= 0 ? l[i] : null;
       switch (e.key) {
@@ -138,6 +160,11 @@ export function ItemList({ items, categories, emptyText, onOpen, compact, pageSi
           e.preventDefault();
           toggleFavorite(cur);
           break;
+        case 'x':
+          if (!cur || !selecting || !check) return;
+          e.preventDefault();
+          check(cur, !checked?.has(cur.id));
+          break;
         default:
       }
     };
@@ -154,7 +181,18 @@ export function ItemList({ items, categories, emptyText, onOpen, compact, pageSi
   return (
     <div className="item-list" ref={listRef}>
       {shown.map((it) => (
-        <ItemRow key={it.id} item={it} categories={categories} onOpen={onOpen} selected={it.id === selectedId} compact={isCompact} />
+        <ItemRow
+          key={it.id}
+          item={it}
+          categories={categories}
+          onOpen={onOpen}
+          selected={it.id === selectedId}
+          compact={isCompact}
+          selectable={selectable}
+          checked={selectable && !!checkedIds?.has(it.id)}
+          onCheck={onCheck}
+          snippet={snippets?.get(it.id)}
+        />
       ))}
       {remaining > 0 ? (
         <div className="item-list-more">

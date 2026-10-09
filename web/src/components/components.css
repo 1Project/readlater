@@ -397,6 +397,7 @@
   position: absolute;
   top: calc(100% + 4px);
   z-index: 50;
+  width: max-content;
   min-width: 200px;
   max-width: min(320px, calc(100vw - 24px));
   padding: 4px;
@@ -444,6 +445,10 @@
   opacity: 0.5;
   cursor: default;
 }
+:root[data-theme='eink'] .menu-item:disabled {
+  opacity: 1;
+  text-decoration: line-through;
+}
 .menu-item.danger {
   color: var(--danger);
 }
@@ -460,6 +465,9 @@
 .menu-label {
   flex: 1;
   min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .menu-separator {
   height: 1px;
@@ -551,6 +559,17 @@
   overflow: hidden;
   overflow-wrap: anywhere;
 }
+.item-snippet mark {
+  background: var(--mark);
+  color: var(--mark-fg);
+  padding: 0 1px;
+}
+:root[data-theme='eink'] .item-snippet mark {
+  background: transparent;
+  color: var(--fg);
+  font-weight: 700;
+  text-decoration: underline;
+}
 .item-thumb {
   flex: none;
   width: 72px;
@@ -583,8 +602,18 @@
   align-items: center;
   gap: 8px;
 }
-.item-chips {
+/* Meta line and chips share the row with the actions, so no row spends a line on actions alone. */
+.item-info {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.item-info .item-meta {
+  margin-top: 0;
+}
+.item-chips {
   min-width: 0;
   display: flex;
   flex-wrap: wrap;
@@ -600,11 +629,28 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* The chip is a flex box: the ellipsis has to live on the text inside it. */
+.chip.item-chip .chip-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .chip.item-chip:hover {
   color: var(--fg);
 }
 .chip.item-category {
   color: var(--fg);
+}
+.chip.item-more-tags {
+  cursor: default;
+}
+.item-state-muted {
+  color: var(--muted);
+}
+:root[data-theme='eink'] .item-state-muted {
+  color: var(--fg);
+  font-style: italic;
 }
 .item-actions {
   flex: none;
@@ -643,6 +689,109 @@
   .item-actions .btn-small {
     padding: 0 8px;
   }
+}
+
+/* ---------- Bulk select ---------- */
+
+.item-actions[hidden] {
+  display: none;
+}
+.item-check {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--tap);
+  min-height: var(--tap);
+  margin: -8px 0 0 -8px;
+  cursor: pointer;
+}
+.item-check input {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  accent-color: var(--fg);
+  cursor: pointer;
+}
+:root[data-theme='eink'] .item-check input {
+  width: 28px;
+  height: 28px;
+  /* A drawn box: the native one renders grey on e-ink. */
+  appearance: none;
+  -webkit-appearance: none;
+  border: 2px solid var(--fg);
+  border-radius: 2px;
+  background: var(--bg);
+  display: inline-grid;
+  place-content: center;
+}
+:root[data-theme='eink'] .item-check input:checked::after {
+  content: '';
+  width: 14px;
+  height: 8px;
+  margin-top: -4px;
+  border-left: 3px solid var(--fg);
+  border-bottom: 3px solid var(--fg);
+  transform: rotate(-45deg);
+}
+.item-row.checked {
+  background: var(--surface);
+}
+:root[data-theme='eink'] .item-row.checked {
+  background: var(--bg);
+  border-left: 6px solid var(--fg);
+  padding-left: 6px;
+}
+
+.bulk-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px -8px 0;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+:root[data-theme='eink'] .bulk-bar {
+  border-top-width: 2px;
+}
+.bulk-bar-head,
+.bulk-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.bulk-bar-head {
+  flex-wrap: wrap;
+}
+/* One row: three main actions share the width, the menu button stays at the end. */
+.bulk-bar-actions > .btn {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bulk-bar-actions > .menu {
+  flex: none;
+}
+@media (max-width: 400px) {
+  .bulk-bar-actions > .btn .icon {
+    display: none;
+  }
+}
+.bulk-count {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  margin-right: auto;
+}
+.bulk-hint {
+  margin: 0;
+}
+.bulk-dialog-note {
+  margin: 0 0 12px;
 }
 
 /* ---------- Add dialog ---------- */

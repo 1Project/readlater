@@ -139,3 +139,54 @@ describe('server-written files', () => {
     await assertFails(st(ALICE).ref(`users/${ALICE}`).listAll());
   });
 });
+
+describe('captured page HTML (server-written upload)', () => {
+  const PAGE = `users/${ALICE}/uploads/item1/page.html`;
+  const HTML_BYTES = new TextEncoder().encode('<html><body>Captured</body></html>');
+
+  it('owner can read it; others cannot', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await put(ctx.storage(), PAGE, HTML_BYTES, 'text/html');
+    });
+    await assertSucceeds(st(ALICE).ref(PAGE).getDownloadURL());
+    await assertFails(st(BOB).ref(PAGE).getDownloadURL());
+    await assertFails(anon().ref(PAGE).getDownloadURL());
+  });
+
+  it('clients can neither write nor delete it (not even disguised as a PDF)', async () => {
+    await assertFails(put(st(ALICE), PAGE, HTML_BYTES, 'text/html'));
+    await assertFails(put(st(ALICE), PAGE, PDF_BYTES, 'application/pdf'));
+    await assertFails(put(st(ALICE), PAGE, PDF_BYTES, 'application/octet-stream'));
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await put(ctx.storage(), PAGE, HTML_BYTES, 'text/html');
+    });
+    await assertFails(put(st(ALICE), PAGE, PDF_BYTES, 'application/pdf'));
+    await assertFails(st(ALICE).ref(PAGE).delete());
+    await assertFails(st(BOB).ref(PAGE).delete());
+  });
+
+  it('PDF/EPUB uploads next to it still work', async () => {
+    await assertSucceeds(put(st(ALICE), `users/${ALICE}/uploads/item1/page.pdf`, PDF_BYTES, 'application/pdf'));
+    await assertFails(put(st(ALICE), `users/${ALICE}/uploads/item1/other.html`, HTML_BYTES, 'text/html'));
+  });
+});
+
+describe('EPUB exports (server-written)', () => {
+  const EXPORT = `users/${ALICE}/exports/AbCdEfGhIjKlMnOpQrSt.epub`;
+
+  it('owner can read exports; others cannot', async () => {
+    await seed(EXPORT, 'application/epub+zip');
+    await assertSucceeds(st(ALICE).ref(EXPORT).getDownloadURL());
+    await assertSucceeds(st(ALICE).ref(EXPORT).getMetadata());
+    await assertFails(st(BOB).ref(EXPORT).getDownloadURL());
+    await assertFails(anon().ref(EXPORT).getDownloadURL());
+  });
+
+  it('nobody can write or delete exports from the client', async () => {
+    await assertFails(put(st(ALICE), EXPORT, PDF_BYTES, 'application/epub+zip'));
+    await assertFails(put(st(ALICE), `users/${ALICE}/exports/new.epub`, PDF_BYTES, 'application/epub+zip'));
+    await seed(EXPORT, 'application/epub+zip');
+    await assertFails(st(ALICE).ref(EXPORT).delete());
+    await assertFails(put(st(BOB), `users/${ALICE}/exports/x.epub`, PDF_BYTES, 'application/epub+zip'));
+  });
+});

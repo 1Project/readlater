@@ -13,7 +13,7 @@ function plural(n: number, one: string, many = `${one}s`) {
   return `${n} ${n === 1 ? one : many}`;
 }
 
-function InlineRename({ initial, label, onSave, onCancel }: { initial: string; label: string; onSave: (v: string) => void; onCancel: () => void }) {
+export function InlineRename({ initial, label, onSave, onCancel }: { initial: string; label: string; onSave: (v: string) => void; onCancel: () => void }) {
   const [value, setValue] = useState(initial);
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -160,6 +160,9 @@ export function CategoriesSection() {
   );
 }
 
+/** Tags listed before "Show all". */
+const TOP_TAGS = 8;
+
 export function TagsSection() {
   const items = useItems();
   const toast = useToast();
@@ -167,11 +170,15 @@ export function TagsSection() {
   const [editing, setEditing] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
   const [busy, setBusy] = useState(false);
+  const [all, setAll] = useState(false);
   const tags = useMemo(() => (items ? tagCounts(items) : undefined), [items]);
-  const shown = useMemo(() => {
+  const matching = useMemo(() => {
     const f = normalizeTag(filter);
     return tags && f ? tags.filter((t) => t.tag.includes(f)) : tags;
   }, [tags, filter]);
+  // The most used tags first; the rest behind "Show all" (a long tag list made the page very tall on phones).
+  const capped = !all && !filter && !!matching && matching.length > TOP_TAGS;
+  const shown = capped ? matching!.slice(0, TOP_TAGS) : matching;
 
   async function run(work: () => Promise<void>, done: string) {
     setBusy(true);
@@ -219,7 +226,7 @@ export function TagsSection() {
         <p className="muted small">No tags yet. Add tags when saving or from an item’s menu.</p>
       ) : (
         <>
-          {tags.length > 12 ? (
+          {tags.length > TOP_TAGS ? (
             <input className="input set-filter" type="search" placeholder="Filter tags" aria-label="Filter tags" value={filter} onChange={(e) => setFilter(e.target.value)} />
           ) : null}
           {busy ? <p className="small muted" role="status">Updating…</p> : null}
@@ -249,6 +256,11 @@ export function TagsSection() {
               </li>
             ))}
           </ul>
+          {capped ? (
+            <button type="button" className="btn btn-small set-show-all" onClick={() => setAll(true)}>
+              Show all ({matching!.length})
+            </button>
+          ) : null}
           {shown && shown.length === 0 ? <p className="muted small">No tags match “{filter}”.</p> : null}
         </>
       )}

@@ -7,10 +7,12 @@ import { sanitizeHtml } from '../extract';
 import { mapLimit } from '../extract/html';
 import { FetchError, fetchText } from '../http';
 import { errorMessage, itemKeywords } from '../processLogic';
+import { loadRules, withRules, type Rule } from '../rules';
 import { newItemData } from '../saveUrl';
 import { hostOf } from '../util';
 import { parseFeed, type ParsedFeed } from './parse';
-import { candidateEntries, capNewEntries, planFeedItem, type Candidate, type FeedSettings } from './select';
+import { candidateEntries, capNewEntries, firstFetchLeftovers, planFeedItem, type Candidate, type FeedSettings } from './select';
+import { markSeen, seenIds } from './seen';
 
 /** Stored shape of users/{uid}/feeds/{feedId}. */
 export interface FeedData {
@@ -25,6 +27,8 @@ export interface FeedData {
   createdAt?: Timestamp;
   etag?: string;
   lastModified?: string;
+  /** Watermark set by the first fetch: older dated entries are never added (docs/SPEC-2.md §9). */
+  since?: Timestamp;
 }
 
 export const FEED_ACCEPT =
@@ -55,7 +59,15 @@ export function feedDataOf(raw: Record<string, unknown> | undefined): FeedData |
     lastError: typeof raw.lastError === 'string' ? raw.lastError : null,
     etag: typeof raw.etag === 'string' && raw.etag ? raw.etag : undefined,
     lastModified: typeof raw.lastModified === 'string' && raw.lastModified ? raw.lastModified : undefined,
+    since: raw.since instanceof Timestamp ? raw.since : undefined,
   };
+}
+
+/** Ids among `ids` that already exist under users/{uid}/items, or were deleted / skipped before (feedSeen). */
+async function knownIds(uid: string, ids: string[]): Promise<Set<string>> {
+  const [items, seen] = await Promise.all([existingIds(uid, ids), seenIds(uid, ids)]);
+  for (const id of seen) items.add(id);
+  return items;
 }
 
 /** Ids among `ids` that already exist under users/{uid}/items. */
@@ -97,18 +109,33 @@ function safeSanitize(html: string, base: string): string {
   }
 }
 
-/** Create one item for a feed entry. Returns false when it already existed. */
-async function writeEntry(uid: string, feedId: string, feed: FeedSettings, siteName: string | null, base: string, c: Candidate): Promise<boolean> {
+/**
+ * Create one item for a feed entry. Returns false when it already existed.
+ * `rules` (the user's auto rules, null when they could not be read) are applied to the new item right away.
+ */
+async function writeEntry(
+  uid: string,
+  feedId: string,
+  feed: FeedSettings,
+  siteName: string | null,
+  base: string,
+  c: Candidate,
+  rules: Rule[] | null,
+): Promise<boolean> {
   const user = userDoc(uid);
   const ref = user.collection('items').doc(c.id);
   const plan = planFeedItem(feedId, feed, siteName, c.entry, safeSanitize(c.entry.html, c.entry.contentBase ?? c.entry.link ?? base));
   const { publishedAt, fetchStatus, ...rest } = plan.fields;
-  const data = newItemData({
+  const fields = newItemData({
     ...rest,
+    source: 'feed',
     publishedAt: publishedAt ? Timestamp.fromDate(publishedAt) : null,
-    // Content is written after the doc exists; 'processing' keeps processItem from picking it up meanwhile.
+    // Content is written after the doc exists; 'processing' keeps processItem from picking it up meanwhile
+    // (processingAt lets sweepItems recover the item if this function dies before it is done).
     fetchStatus: fetchStatus === 'pending' ? 'pending' : 'processing',
+    ...(fetchStatus === 'pending' ? {} : { processingAt: FieldValue.serverTimestamp() }),
   });
+  const data = rules ? withRules(rules, fields, { feedTitle: feed.title || siteName }) : fields;
   try {
     await ref.create(data);
   } catch (e) {
@@ -119,7 +146,7 @@ async function writeEntry(uid: string, feedId: string, feed: FeedSettings, siteN
   try {
     const chunks = await writeContent(ref, plan.html);
     const batch = db.batch();
-    batch.update(ref, { fetchStatus: 'done', contentChunks: chunks, updatedAt: FieldValue.serverTimestamp() });
+    batch.update(ref, { fetchStatus: 'done', contentChunks: chunks, processingAt: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp() });
     batch.set(user.collection('search').doc(c.id), { kw: itemKeywords(data, plan.text) });
     await batch.commit();
   } catch (e) {
@@ -127,8 +154,8 @@ async function writeEntry(uid: string, feedId: string, feed: FeedSettings, siteN
     logger.warn('feed entry content write failed', { uid, feedId, id: c.id, error: (e as Error).message });
     await ref.update(
       c.entry.link
-        ? { fetchStatus: 'pending', updatedAt: FieldValue.serverTimestamp() }
-        : { fetchStatus: 'error', fetchError: errorMessage(e), updatedAt: FieldValue.serverTimestamp() },
+        ? { fetchStatus: 'pending', processingAt: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp() }
+        : { fetchStatus: 'error', fetchError: errorMessage(e), processingAt: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp() },
     );
   }
   return true;
@@ -138,8 +165,8 @@ async function writeEntry(uid: string, feedId: string, feed: FeedSettings, siteN
 export async function ingestFeed(uid: string, ref: DocumentReference, feed: FeedData, fetched: FetchedFeed): Promise<number> {
   const { parsed } = fetched;
   const firstFetch = !feed.lastFetchedAt;
-  const cands = candidateEntries(ref.id, parsed.entries, firstFetch);
-  const exist = await existingIds(uid, cands.map((c) => c.id));
+  const cands = candidateEntries(ref.id, parsed.entries, firstFetch, new Date(), feed.since?.toDate() ?? null);
+  const exist = await knownIds(uid, cands.map((c) => c.id));
   let selected = capNewEntries(cands, exist);
   const links = selected.map((c) => c.entry.link).filter((l): l is string => !!l);
   if (links.length) {
@@ -150,10 +177,16 @@ export async function ingestFeed(uid: string, ref: DocumentReference, feed: Feed
   const settings: FeedSettings = { title: feed.title, url: feed.url, tags: feed.tags, categoryId: feed.categoryId, fullText: feed.fullText };
   const base = parsed.siteUrl ?? fetched.finalUrl;
   let added = 0;
+  const rules = selected.length
+    ? await loadRules(uid).catch((e: unknown) => {
+        logger.warn('loading rules failed', { uid, error: (e as Error).message });
+        return null;
+      })
+    : null;
   // Oldest first, so creation order roughly follows publication order.
   await mapLimit([...selected].reverse(), 4, async (c) => {
     try {
-      if (await writeEntry(uid, ref.id, settings, siteName, base, c)) added++;
+      if (await writeEntry(uid, ref.id, settings, siteName, base, c, rules)) added++;
     } catch (e) {
       logger.warn('feed entry write failed', { uid, feedId: ref.id, id: c.id, error: (e as Error).message });
     }
@@ -164,6 +197,12 @@ export async function ingestFeed(uid: string, ref: DocumentReference, feed: Feed
     etag: fetched.etag ?? FieldValue.delete(),
     lastModified: fetched.lastModified ?? FieldValue.delete(),
   };
+  if (firstFetch) {
+    // Keep later refreshes from adding the backlog this first fetch skipped (FIRST_FETCH_LIMIT).
+    const { since, rest } = firstFetchLeftovers(ref.id, parsed.entries);
+    if (since) patch.since = Timestamp.fromDate(since);
+    await markSeen(uid, ref.id, rest.map((c) => c.id)).catch((e: unknown) => logger.warn('marking skipped entries failed', { uid, feedId: ref.id, error: String(e) }));
+  }
   if (!feed.title && parsed.title) patch.title = parsed.title;
   if (!feed.siteUrl && parsed.siteUrl) patch.siteUrl = parsed.siteUrl;
   await updateIfExists(ref, patch);

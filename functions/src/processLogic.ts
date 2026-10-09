@@ -16,6 +16,50 @@ export interface StoredFile {
 
 const INDEXED_FIELDS = ['title', 'author', 'siteName', 'note', 'url', 'tags'] as const;
 
+/**
+ * Bookkeeping fields of a processing run (server-only; docs/SPEC-2.md §9):
+ *   processingAt   when the item entered 'processing' (the sweeper re-queues runs that never finished)
+ *   processingRun  id of the run that owns the item (only that run may write the result)
+ *   processAttempts runs that did not finish, so far
+ *   retryAt        a rate-limited item is queued again by the sweeper at this time
+ */
+export const PROCESSING_STALE_MS = 10 * 60_000;
+/** Runs that may die (out of memory, timeout) before the item is marked as failed. */
+export const MAX_PROCESS_ATTEMPTS = 3;
+/** Items one user may have processed per hour; more wait (retryAt) and are queued again later. */
+export const PROCESS_PER_HOUR = 300;
+export const RATE_LIMITED_MESSAGE = 'Waiting: many pages were fetched in the last hour. This one is fetched automatically soon.';
+export const STALLED_MESSAGE = 'Fetching this item did not finish (the page may be too large or too slow). Try again later.';
+
+/** Clears the run bookkeeping; part of every final (done / error) patch. */
+export function endRunFields(): ItemData {
+  return { processingAt: FieldValue.delete(), processingRun: FieldValue.delete(), retryAt: FieldValue.delete() };
+}
+
+/**
+ * Patch for an item found in 'processing' after its run should have ended: queue it again, or give up after
+ * MAX_PROCESS_ATTEMPTS. Items without a URL or file (notes, newsletters whose save was interrupted) cannot be
+ * fetched again. Returns null when the item is no longer stuck.
+ */
+export function stalePatch(cur: ItemData, now: number): ItemData | null {
+  if (cur.fetchStatus !== 'processing') return null;
+  const at = cur.processingAt as Timestamp | undefined;
+  if (!at || typeof at.toMillis !== 'function' || now - at.toMillis() < PROCESSING_STALE_MS) return null;
+  const attempts = (typeof cur.processAttempts === 'number' ? cur.processAttempts : 0) + 1;
+  const fetchable = (typeof cur.url === 'string' && !!cur.url) || !!(cur.file as { path?: unknown } | null)?.path;
+  if (!fetchable || attempts >= MAX_PROCESS_ATTEMPTS) {
+    return { fetchStatus: 'error', fetchError: STALLED_MESSAGE, processAttempts: FieldValue.delete(), ...endRunFields(), updatedAt: FieldValue.serverTimestamp() };
+  }
+  return { fetchStatus: 'pending', processAttempts: attempts, ...endRunFields(), updatedAt: FieldValue.serverTimestamp() };
+}
+
+/** Patch to queue a rate-limited (error + retryAt) item again once its time has come; null when not due. */
+export function retryPatch(cur: ItemData, now: number): ItemData | null {
+  const at = cur.retryAt as Timestamp | undefined;
+  if (cur.fetchStatus !== 'error' || !at || typeof at.toMillis !== 'function' || at.toMillis() > now) return null;
+  return { fetchStatus: 'pending', fetchError: null, retryAt: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp() };
+}
+
 /** What processItem should do for a write. Never reacts to its own writes (pending→processing→done). */
 export function decideAction(before: ItemData | undefined, after: ItemData | undefined): Action {
   if (!after) return 'none';
@@ -58,6 +102,8 @@ export function donePatch(cur: ItemData, ex: Extracted, chunks: number, file: St
     paper: ex.paper ?? cur.paper ?? null,
     fetchStatus: 'done',
     fetchError: null,
+    processAttempts: FieldValue.delete(),
+    ...endRunFields(),
     updatedAt: FieldValue.serverTimestamp(),
   };
   if (!cur.titleLocked && ex.title && ex.title.trim()) patch.title = ex.title.trim();

@@ -3,6 +3,15 @@ dist/
 /functions/lib/
 .env
 .env.local
+# Cloud Functions settings per project (written by scripts/setup.sh; may hold plain-env values such as a
+# webhook secret) and local emulator secrets: never committed. GitHub Actions deploys get them from the
+# FUNCTIONS_ENV repository variable instead (see README → Deploy).
+functions/.env.*
+.secret.local
+.runtimeconfig.json
+# Per-project web config written by scripts/setup.sh (CI builds without it and loads /__/firebase/init.json).
+web/.env.production
+web/.env.*.local
 *.log
 .firebase/
 firebase-debug*.log
@@ -12,6 +21,7 @@ pubsub-debug.log
 .DS_Store
 test-results/
 playwright-report/
+blob-report/
 web/android/app/build/
 web/android/build/
 web/android/.gradle/
@@ -19,6 +29,7 @@ web/android/local.properties
 web/ios/App/build/
 web/ios/DerivedData/
 *.keystore
+*.jks
 !debug.keystore
 service-account*.json
 *.tsbuildinfo

@@ -5,22 +5,62 @@ import { extractEpub } from './epub';
 import { collapseWs, escapeHtml, fileNameFromUrl, httpUrl, parseHtml, titleFromFileName } from './html';
 import { cleanAuthor, extractMeta, type PageMeta } from './meta';
 import { extractPdf } from './pdf';
-import { fixLazyImages, sanitizeHtml } from './sanitize';
+import { NOTE_CLASS, fixLazyImages, sanitizeHtml } from './sanitize';
 import { finalize, htmlToText } from './text';
 import type { Extracted, UploadImage } from './types';
+import { fetchSnapshot, isArchiveWorthyError, looksBlocked, looksPaywalled, markArchived } from './wayback';
 
 export interface ExtractUrlOptions {
   /** Used when a URL turns out to be an EPUB; without it, book images are dropped. */
   uploadImage?: UploadImage;
+  /** Try the Internet Archive when the page is dead, blocked or paywalled (default true). */
+  wayback?: boolean;
 }
 
 export const MAX_HTML_BYTES = 10 * 1024 * 1024;
 export const MAX_FILE_BYTES = 50 * 1024 * 1024;
 
-/** Fetch any URL and extract it, delegating PDFs/EPUBs to their extractors. */
+/** Below this many words a paywalled or blocked page is retried from the Internet Archive. */
+export const ARCHIVE_MIN_WORDS = 200;
+
+/**
+ * Fetch any URL and extract it, delegating PDFs/EPUBs to their extractors. When the fetch fails (HTTP error,
+ * timeout, dead host) or the page is a short paywall/bot-wall stub, the latest Wayback snapshot is used instead.
+ */
 export async function extractGeneric(url: string, opts: ExtractUrlOptions = {}): Promise<Extracted> {
-  const res = await fetchBuffer(url, { maxBytes: MAX_FILE_BYTES, timeoutMs: 30_000 });
-  return extractFromResponse(res, opts, 0);
+  const wayback = opts.wayback !== false;
+  let res: FetchResult;
+  try {
+    res = await fetchBuffer(url, { maxBytes: MAX_FILE_BYTES, timeoutMs: 30_000 });
+  } catch (e) {
+    if (wayback && isArchiveWorthyError(e)) {
+      const archived = await extractFromArchive(url, opts);
+      if (archived) return archived;
+    }
+    throw e;
+  }
+  const r = await extractFromResponse(res, opts, 0);
+  if (wayback && r.wordCount < ARCHIVE_MIN_WORDS && looksLikeHtml(res.contentType, res.body)) {
+    const html = decodeBody(res.body, res.contentType);
+    if (looksBlocked(html) || looksPaywalled(html, r.text)) {
+      const archived = await extractFromArchive(url, opts);
+      if (archived && archived.wordCount > r.wordCount * 1.5) return archived;
+    }
+  }
+  return r;
+}
+
+/** Extract the latest Internet Archive snapshot of `url`, or null when there is none / it is unusable. */
+export async function extractFromArchive(url: string, opts: ExtractUrlOptions = {}): Promise<Extracted | null> {
+  const snap = await fetchSnapshot(url);
+  if (!snap) return null;
+  try {
+    // `id_` snapshots are the original bytes: extract them against the original URL (depth 2: no meta-refresh hops).
+    const r = await extractFromResponse({ ...snap.res, url: snap.snapshot.original }, opts, 2);
+    return r.text || r.html ? markArchived(r, snap.snapshot, url) : null;
+  } catch {
+    return null;
+  }
 }
 
 export function isPdf(contentType: string, body: Buffer): boolean {
@@ -174,6 +214,8 @@ export function extractFromHtml(html: string, url: string, opts: HtmlExtractOpti
     const doc = dom.window.document;
     const base = doc.baseURI || url;
     const meta: PageMeta = extractMeta(doc, url);
+    // The note class is reserved for our own notes (e.g. "Loaded from the Internet Archive").
+    doc.querySelectorAll(`.${NOTE_CLASS}`).forEach((el) => el.classList.remove(NOTE_CLASS));
     opts.prepare?.(doc);
     if (doc.body) {
       fixLazyImages(doc.body);

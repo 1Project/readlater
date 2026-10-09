@@ -8,7 +8,7 @@
  *
  * Exports:
  *   type Quote = { text: string; prefix: string; suffix: string }
- *   type Anchorable = { id: string; text: string; prefix: string; suffix: string; note?: string }
+ *   type Anchorable = { id: string; text: string; prefix: string; suffix: string; note?: string; color?: string }
  *   QUOTE_CONTEXT = 32                                   chars of prefix / suffix stored with a quote
  *   collapseWhitespace(s): string                        runs of whitespace → one space (no trim)
  *   buildTextIndex(root): TextIndex                      text model + mapping back to DOM text nodes
@@ -18,7 +18,8 @@
  *                                                        else the first exact match wins
  *   applyHighlights(root, highlights): { applied: string[]; missing: string[] }
  *                                                        wraps matches in <mark class="hl" data-hid>
- *                                                        (applied = ids in document order)
+ *                                                        (+ data-color when the highlight has a colour;
+ *                                                        applied = ids in document order)
  *   clearHighlights(root): void                          removes marks added by applyHighlights
  */
 
@@ -31,6 +32,8 @@ export interface Quote {
 export interface Anchorable extends Quote {
   id: string;
   note?: string;
+  /** Highlight colour name (yellow, green, blue, pink), set as data-color on the marks. */
+  color?: string;
 }
 
 export const QUOTE_CONTEXT = 32;
@@ -350,6 +353,7 @@ export function applyHighlights(root: Element, highlights: Anchorable[]): { appl
       const mark = doc.createElement('mark');
       mark.className = h.note && h.note.trim() ? 'hl has-note' : 'hl';
       mark.setAttribute('data-hid', h.id);
+      if (h.color) mark.setAttribute('data-color', h.color);
       mark.appendChild(doc.createTextNode(piece));
       frag.appendChild(mark);
       prev = { order: owner.order, mark };

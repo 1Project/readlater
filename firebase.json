@@ -23,6 +23,10 @@
       { "source": "**", "headers": [
         { "key": "X-Content-Type-Options", "value": "nosniff" },
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
+      ] },
+      { "regex": "^/(|([^a_/][^/]*|a([^p/][^/]*)?|ap([^i/][^/]*)?|api[^/]+|_([^_/][^/]*)?|__[^/]+)(/.*)?)$", "headers": [
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' https://apis.google.com https://www.gstatic.com; style-src 'self' 'unsafe-inline'; img-src * data: blob:; media-src * data: blob:; font-src 'self' data:; connect-src 'self' https://*.googleapis.com https://*.cloudfunctions.net https://*.run.app https://apis.google.com http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*; frame-src 'self' https://*.firebaseapp.com https://*.web.app https://accounts.google.com https://apis.google.com http://127.0.0.1:* http://localhost:*; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'" }
       ] }
     ]
   },

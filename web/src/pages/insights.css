@@ -1,0 +1,321 @@
+/* Stats (/stats) and Daily review (/review). Variables only (no colour literals) so the e-ink theme stays
+   pure black on white. Refinements of primitives use more specific selectors (load order is not fixed). */
+
+.insights-title {
+  font-size: 1.5rem;
+  margin: 8px 0 12px;
+}
+
+/* ---------- Stats: tiles ---------- */
+
+.stats-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+.stats-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  min-width: 0;
+}
+.stats-tile dd {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+.stats-value {
+  font-size: 1.35rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+:root[data-theme='eink'] .stats-tile {
+  border-width: 2px;
+}
+:root[data-theme='eink'] .stats-tile .muted {
+  color: var(--fg);
+}
+@media (max-width: 380px) {
+  .stats-tiles {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* ---------- Stats: weekly table with CSS bars ---------- */
+
+.stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-variant-numeric: tabular-nums;
+}
+.stats-table th,
+.stats-table td {
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  font-weight: 400;
+}
+.stats-table thead th {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.stats-table th[scope='row'] {
+  width: 26%;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stats-table thead th:first-child {
+  width: 26%;
+}
+:root[data-theme='eink'] .stats-table th,
+:root[data-theme='eink'] .stats-table td {
+  border-bottom-width: 2px;
+  border-color: var(--fg);
+}
+:root[data-theme='eink'] .stats-table thead th {
+  color: var(--fg);
+}
+.stats-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.stats-track {
+  flex: 1;
+  min-width: 0;
+  height: 12px;
+  display: flex;
+}
+.stats-bar {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+}
+.stats-bar-saved {
+  background: var(--faint);
+}
+.stats-bar-finished {
+  background: var(--accent);
+}
+:root[data-theme='eink'] .stats-bar-saved {
+  background: var(--bg);
+  border: 2px solid var(--fg);
+}
+:root[data-theme='eink'] .stats-bar-finished {
+  background: var(--fg);
+}
+.stats-key {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 2px;
+  vertical-align: middle;
+  border-radius: 2px;
+}
+.stats-num {
+  flex: none;
+  min-width: 2.5ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Stats: rankings ---------- */
+
+.stats-lists {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0 24px;
+}
+@media (max-width: 520px) {
+  .stats-lists {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.stats-rank {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.stats-rank li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  border-bottom: 1px solid var(--border);
+}
+.stats-rank li > :first-child {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stats-rank a {
+  text-decoration: none;
+}
+.stats-rank a:hover {
+  text-decoration: underline;
+}
+:root[data-theme='eink'] .stats-rank li {
+  border-bottom-width: 2px;
+  border-color: var(--fg);
+  min-height: 44px;
+}
+.stats-footnote {
+  margin-top: 24px;
+}
+
+/* ---------- Daily review ---------- */
+
+.review-date {
+  margin: -6px 0 12px;
+}
+.card.review-card,
+.card.review-done {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 240px;
+  padding: 20px;
+  outline: none;
+}
+.card.review-card {
+  cursor: pointer;
+}
+.card.review-done {
+  justify-content: center;
+  text-align: center;
+}
+:root[data-theme='eink'] .card.review-card,
+:root[data-theme='eink'] .card.review-done {
+  border-width: 2px;
+}
+.review-count {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.review-quote {
+  margin: 0;
+  padding: 2px 0 2px 16px;
+  border-left: 3px solid var(--accent);
+  font-family: var(--font-serif);
+  font-size: 1.2rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+:root[data-theme='eink'] .review-quote {
+  border-left: 4px solid var(--fg);
+}
+/* Highlight colours (same mapping as the reader's highlights panel). */
+.review-quote[data-color='yellow'] {
+  border-left-color: var(--hl-yellow);
+}
+.review-quote[data-color='green'] {
+  border-left-color: var(--hl-green);
+}
+.review-quote[data-color='blue'] {
+  border-left-color: var(--hl-blue);
+}
+.review-quote[data-color='pink'] {
+  border-left-color: var(--hl-pink);
+}
+:root[data-theme='eink'] .review-quote[data-color] {
+  border-left-color: var(--fg);
+}
+:root[data-theme='eink'] .review-quote[data-color='green'] {
+  border-left: 5px double var(--fg);
+}
+:root[data-theme='eink'] .review-quote[data-color='blue'] {
+  border-left-style: dotted;
+}
+:root[data-theme='eink'] .review-quote[data-color='pink'] {
+  border-left-style: dashed;
+}
+
+.review-note {
+  margin: 0 0 0 19px;
+  padding: 8px 12px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+:root[data-theme='eink'] .review-note {
+  background: var(--bg);
+  border: 1px solid var(--fg);
+}
+.review-source {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.review-doc {
+  font-weight: 600;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.review-doc:hover {
+  text-decoration: underline;
+}
+.btn.review-open {
+  margin-top: 4px;
+}
+.review-done-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+.review-done p {
+  margin: 0;
+}
+.review-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.btn.review-nav-btn {
+  flex: 1 1 0;
+  min-height: 52px;
+  font-size: 1rem;
+}
+.review-dots {
+  display: flex;
+  gap: 6px;
+  flex: none;
+}
+.review-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1px solid var(--fg);
+}
+.review-dot.seen {
+  background: var(--faint);
+  border-color: var(--faint);
+}
+.review-dot.current {
+  background: var(--fg);
+}
+:root[data-theme='eink'] .review-dot.seen {
+  background: var(--bg);
+  border-color: var(--fg);
+}
+@media (max-width: 380px) {
+  .review-dots {
+    display: none;
+  }
+}

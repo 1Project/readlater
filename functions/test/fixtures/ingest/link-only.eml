@@ -1,0 +1,16 @@
+From: Alice <alice@example.org>
+To: abcdefghij@in.example.com
+Subject: Fwd: worth reading
+Message-ID: <fwd-1@example.org>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+---------- Forwarded message ---------
+From: Bob <bob@example.net>
+Date: Mon, 5 Oct 2026 at 10:00
+Subject: worth reading
+To: Alice <alice@example.org>
+
+https://www.paulgraham.com/greatwork.html
+
+Sent from my iPhone

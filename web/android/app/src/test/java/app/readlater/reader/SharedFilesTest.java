@@ -61,4 +61,38 @@ public class SharedFilesTest {
         assertTrue(fresh.exists());
         assertFalse(stale.exists());
     }
+
+    @Test
+    public void isAllowedSource_onlyContentUrisOfOtherApps() {
+        String own = "app.readlater.reader";
+        assertTrue(SharedFiles.isAllowedSource("content", "com.android.providers.downloads.documents", own));
+        assertTrue(SharedFiles.isAllowedSource("content", "app.readlaterx.provider", own));
+        assertFalse(SharedFiles.isAllowedSource("file", null, own));
+        assertFalse(SharedFiles.isAllowedSource("file", "", own));
+        assertFalse(SharedFiles.isAllowedSource("content", "app.readlater.reader.fileprovider", own));
+        assertFalse(SharedFiles.isAllowedSource("content", "APP.READLATER.READER", own));
+        assertFalse(SharedFiles.isAllowedSource("content", null, own));
+        assertFalse(SharedFiles.isAllowedSource("https", "example.com", own));
+    }
+
+    @Test
+    public void looksLike_checksTheBytes() {
+        byte[] pdf = "%PDF-1.7\n...".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+        assertTrue(SharedFiles.looksLike(pdf, pdf.length, SharedFiles.MIME_PDF));
+        assertFalse(SharedFiles.looksLike(pdf, pdf.length, SharedFiles.MIME_EPUB));
+        byte[] sqlite = "SQLite format 3\u0000".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+        assertFalse(SharedFiles.looksLike(sqlite, sqlite.length, SharedFiles.MIME_PDF));
+
+        byte[] epub = new byte[30 + 28];
+        epub[0] = 'P';
+        epub[1] = 'K';
+        epub[2] = 3;
+        epub[3] = 4;
+        byte[] name = "mimetypeapplication/epub+zip".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+        System.arraycopy(name, 0, epub, 30, name.length);
+        assertTrue(SharedFiles.looksLike(epub, epub.length, SharedFiles.MIME_EPUB));
+        epub[3] = 5;
+        assertFalse(SharedFiles.looksLike(epub, epub.length, SharedFiles.MIME_EPUB));
+        assertFalse(SharedFiles.looksLike(null, 0, SharedFiles.MIME_PDF));
+    }
 }

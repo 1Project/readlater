@@ -9,6 +9,9 @@
  *   toggleSeen(item): void         feed: unread (new) <-> archived (seen)
  *   saveToLibrary(item): void      feed -> library, status unread
  *   retryFetch(item): void         refetchItem (sets fetchStatus 'pending')
+ *   canRefetch(item): boolean      "Fetch again" is possible: done / error, or a run that has not finished in
+ *                                  STALE_PROCESSING_MS (the server refuses to queue an item while a run is live)
+ *   isStalled(item): boolean       processing for longer than STALE_PROCESSING_MS
  *   deleteWithConfirm(item): Promise<boolean>   asks first (useConfirm), resolves true when deleted
  *   openOriginal(item): void       opens item.url, or the stored file (pdf/epub) via fileUrl(), with openExternal()
  */
@@ -62,6 +65,22 @@ export function saveToLibrary(item: Item): void {
 
 export function retryFetch(item: Item): void {
   refetchItem(item.id).catch(fail('Could not retry'));
+}
+
+/** Same as the server's limit (firestore.rules requeueAllowed): a run older than this is dead. */
+export const STALE_PROCESSING_MS = 10 * 60_000;
+
+export function isStalled(item: Item, now = Date.now()): boolean {
+  if (item.fetchStatus !== 'processing') return false;
+  const at = item.processingAt?.toMillis?.();
+  // Items from before processingAt existed: fall back to the last update.
+  const since = at ?? item.updatedAt?.toMillis?.() ?? now;
+  return now - since > STALE_PROCESSING_MS;
+}
+
+export function canRefetch(item: Item): boolean {
+  if (!item.url && !item.file) return false;
+  return item.fetchStatus === 'done' || item.fetchStatus === 'error' || isStalled(item);
 }
 
 export async function deleteWithConfirm(item: Item): Promise<boolean> {

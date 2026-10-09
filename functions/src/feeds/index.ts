@@ -9,6 +9,7 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { db, REGION } from '../admin';
 import { mapLimit } from '../extract/html';
+import { enforce, HOUR } from '../rateLimit';
 import { normalizeTags } from '../util';
 import { parseOpml } from './opml';
 import { refreshFeed } from './poll';
@@ -55,6 +56,7 @@ const REFRESH_BUDGET_MS = 470_000;
 
 export const refreshFeeds = onCall({ region: REGION, timeoutSeconds: 540, memory: '1GiB' }, async (request) => {
   const uid = requireUid(request);
+  await enforce(`refresh:${uid}`, 30, HOUR, 'Feeds were refreshed many times in the last hour. They also refresh by themselves every hour.');
   const data = (request.data ?? {}) as { feedId?: unknown };
   if (data.feedId !== undefined && data.feedId !== null) {
     if (typeof data.feedId !== 'string' || !data.feedId || data.feedId.includes('/')) throw new HttpsError('invalid-argument', 'Invalid feed id');

@@ -6,6 +6,8 @@
  *                                           rel="noopener noreferrer"; images get loading="lazy",
  *                                           decoding="async", referrerpolicy="no-referrer"; only
  *                                           http(s)/mailto links and http(s)/data:image sources survive.
+ *                                           The only class kept is `<p class="rl-note">` (an extractor note such
+ *                                           as "Loaded from the Internet Archive…", styled by reader.css).
  *   hasChapters(html: string): boolean      content contains EPUB chapter sections
  */
 import DOMPurify from 'dompurify';
@@ -23,8 +25,11 @@ const MATH_TAGS = [
   'mphantom', 'menclose', 'mmultiscripts', 'mprescripts', 'none',
 ];
 
+/** The one class the server keeps (functions/src/extract/sanitize.ts NOTE_CLASS). */
+const NOTE_CLASS = 'rl-note';
+
 const ATTRS = [
-  'href', 'src', 'alt', 'title', 'colspan', 'rowspan', 'data-chapter', 'data-page', 'open', 'datetime',
+  'class', 'href', 'src', 'alt', 'title', 'colspan', 'rowspan', 'data-chapter', 'data-page', 'open', 'datetime',
   'display', 'mathvariant', 'encoding', 'stretchy', 'fence', 'separator', 'accent', 'accentunder', 'columnalign',
   'linethickness', 'lspace', 'rspace', 'notation',
 ];
@@ -37,6 +42,10 @@ function getPurifier() {
   p.addHook('afterSanitizeAttributes', (node) => {
     const el = node as Element;
     const tag = el.tagName?.toLowerCase();
+    if (el.hasAttribute?.('class')) {
+      if (tag === 'p' && (el.getAttribute('class') ?? '').trim() === NOTE_CLASS) el.setAttribute('class', NOTE_CLASS);
+      else el.removeAttribute('class');
+    }
     if (tag === 'a') {
       const href = el.getAttribute('href') ?? '';
       if (href && !/^(https?:|mailto:)/i.test(href.trim())) el.removeAttribute('href');

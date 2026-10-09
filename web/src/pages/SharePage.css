@@ -1,0 +1,75 @@
+/* Public share page (/s/:token). The article itself uses the reader styles (reader.css); this file only
+   adds the page frame, the highlights list and the credit line. Variables only, no colour literals. */
+
+.share-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+.share-page .article-scroll .article-clip {
+  padding-top: max(16px, env(safe-area-inset-top));
+  padding-bottom: max(48px, env(safe-area-inset-bottom));
+}
+.share-state {
+  padding-top: max(48px, env(safe-area-inset-top));
+}
+.share-state h1 {
+  font-size: 1.4rem;
+  margin: 0 0 8px;
+}
+
+.share-footer {
+  margin-top: 48px;
+}
+.share-highlights {
+  margin-bottom: 28px;
+}
+.share-hl-title {
+  font-size: 1.1rem;
+  margin: 0 0 12px;
+}
+.share-hl-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.share-hl {
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+  outline: none;
+}
+.share-hl:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.share-hl:focus-visible {
+  outline: 2px solid var(--fg);
+  outline-offset: 4px;
+}
+.share-hl-quote {
+  margin: 0;
+  padding-left: 12px;
+  border-left: 3px solid var(--hl-yellow);
+  font-family: var(--reader-font);
+  white-space: pre-wrap;
+}
+:root[data-theme='eink'] .share-hl-quote {
+  border-left-color: var(--fg);
+}
+.share-hl-note {
+  margin: 6px 0 0 15px;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+:root[data-theme='eink'] .share-hl-note {
+  color: var(--fg);
+  font-style: italic;
+}
+.share-credit {
+  margin: 0;
+}
+.share-state .share-credit {
+  margin-top: 32px;
+}
+.share-credit a {
+  color: inherit;
+}

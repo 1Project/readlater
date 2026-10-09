@@ -1,4 +1,8 @@
-/** Personal API keys for the HTTP `api` endpoint (bookmarklets, iOS Shortcuts, scripts). */
+/**
+ * Personal API keys for the HTTP `api` endpoint (bookmarklets, iOS Shortcuts, scripts).
+ * Scopes: 'all' (save and read: the extension, scripts) or 'save' (only POST/GET /api/save: the bookmarklet,
+ * whose code runs inside the pages it is clicked on, so those pages can read the key).
+ */
 import './options';
 import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
@@ -11,6 +15,15 @@ export const API_KEY_RE = /^rl_[A-Za-z0-9]{40}$/;
 export const isApiKeyFormat = (k: string): boolean => API_KEY_RE.test(k);
 export const KEY_ID_RE = /^[0-9a-f]{64}$/;
 
+export type KeyScope = 'all' | 'save';
+export const isKeyScope = (v: unknown): v is KeyScope => v === 'all' || v === 'save';
+
+/** Scope of a stored key. Keys made before scopes existed are full keys, except the bookmarklet's. */
+export function keyScope(doc: { scope?: unknown; name?: unknown }): KeyScope {
+  if (isKeyScope(doc.scope)) return doc.scope;
+  return doc.name === 'Bookmarklet' ? 'save' : 'all';
+}
+
 export function cleanKeyName(name: unknown): string {
   const n = typeof name === 'string' ? name.replace(/\s+/g, ' ').trim().slice(0, 60) : '';
   return n || 'API key';
@@ -19,15 +32,18 @@ export function cleanKeyName(name: unknown): string {
 export const createApiKey = onCall({ region: REGION }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError('unauthenticated', 'Sign in first');
-  const name = cleanKeyName((request.data as { name?: unknown } | null)?.name);
+  const data = (request.data ?? {}) as { name?: unknown; scope?: unknown };
+  const name = cleanKeyName(data.name);
+  if (data.scope !== undefined && !isKeyScope(data.scope)) throw new HttpsError('invalid-argument', 'Invalid key scope');
+  const scope: KeyScope = data.scope === 'save' ? 'save' : 'all';
   const mirror = db.collection('users').doc(uid).collection('apiKeys');
   const count = (await mirror.count().get()).data().count;
   if (count >= MAX_KEYS) throw new HttpsError('failed-precondition', `You can have at most ${MAX_KEYS} API keys. Revoke one first.`);
   const key = generateApiKey();
   const id = sha256(key);
   const batch = db.batch();
-  batch.create(db.collection('apiKeys').doc(id), { uid, name, createdAt: FieldValue.serverTimestamp() });
-  batch.set(mirror.doc(id), { name, prefix: key.slice(0, 6), createdAt: FieldValue.serverTimestamp(), lastUsedAt: null });
+  batch.create(db.collection('apiKeys').doc(id), { uid, name, scope, createdAt: FieldValue.serverTimestamp() });
+  batch.set(mirror.doc(id), { name, scope, prefix: key.slice(0, 6), createdAt: FieldValue.serverTimestamp(), lastUsedAt: null });
   await batch.commit();
   return { id, key };
 });

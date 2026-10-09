@@ -127,6 +127,29 @@ describe.skipIf(!EMU)('feeds against the Firestore emulator', () => {
     expect((await feedRef.get()).get('lastError')).toMatch(/HTTP 500/);
   });
 
+  it('a refresh neither re-adds deleted entries nor the backlog the first fetch skipped', async () => {
+    const { feedSeenRef, seenDoc } = await import('../src/feeds/seen');
+    const feedRef = user().collection('feeds').doc('backlog');
+    await feedRef.set({ url: 'https://bl.example.com/rss', title: 'BL', siteUrl: null, categoryId: null, tags: [], fullText: false, lastFetchedAt: null, lastError: null });
+    // 30 posts, one every 12 hours: the first fetch takes the newest 20.
+    const posts = Array.from({ length: 30 }, (_, i) => ({ guid: `p${i}`, title: `Post ${i}`, daysAgo: i / 2 }));
+    mockFetch([['https://bl.example.com/rss', { body: rss(posts), type: 'application/rss+xml' }]]);
+    expect(await m.poll.refreshFeed(uid, await feedRef.get())).toBe(20);
+    expect((await feedRef.get()).get('since')).toBeTruthy();
+    // The user deletes one entry (cleanupItem leaves a feedSeen tombstone).
+    const gone = m.select.feedItemId('backlog', 'p3');
+    await user().collection('items').doc(gone).delete();
+    await feedSeenRef(uid, gone).set(seenDoc('backlog'));
+    // Same feed again (no ETag): nothing comes back.
+    expect(await m.poll.refreshFeed(uid, await feedRef.get())).toBe(0);
+    expect((await user().collection('items').doc(gone).get()).exists).toBe(false);
+    expect((await user().collection('items').doc(m.select.feedItemId('backlog', 'p25')).get()).exists).toBe(false);
+    // A new post still arrives.
+    vi.restoreAllMocks();
+    mockFetch([['https://bl.example.com/rss', { body: rss([{ guid: 'new', title: 'New', daysAgo: 0 }, ...posts]), type: 'application/rss+xml' }]]);
+    expect(await m.poll.refreshFeed(uid, await feedRef.get())).toBe(1);
+  });
+
   it('full-text feeds leave every new item pending', async () => {
     const feedRef = user().collection('feeds').doc('ft');
     await feedRef.set({ url: 'https://ft.example.com/rss', title: 'FT', siteUrl: null, categoryId: null, tags: [], fullText: true, lastFetchedAt: null, lastError: null });

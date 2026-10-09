@@ -1,0 +1,26 @@
+Return-Path: <news@dispatch.example.com>
+From: "The Dispatch" <news@dispatch.example.com>
+To: Reader <abcdefghij@in.example.com>
+Subject: =?UTF-8?Q?Caf=C3=A9_culture_=E2=80=94_issue_42?=
+Date: Tue, 06 Oct 2026 08:30:00 +0000
+Message-ID: <issue42.1234@dispatch.example.com>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="b1"
+
+--b1
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Hello reader, this week we look at a long story about caf=C3=A9 culture.
+Second paragraph with more words so that this is clearly a real newsletter.
+
+--b1
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+<html><body><span style=3D"display:none">Preheader teaser</span><h1>The Weekly=
+ Dispatch</h1><p>Hello reader, this week we look at a long story about caf=C3=
+=A9 culture.</p><p>Second paragraph with more words so that this is clearly a=
+ real newsletter.</p></body></html>
+
+--b1--

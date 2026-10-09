@@ -1,13 +1,6 @@
-/** Settings › Appearance (theme, list density, images) and Reader typography. Per-device prefs (lib/prefs). */
-import { setPref, usePrefs, type FontFamily, type Prefs, type ReaderMode, type Theme } from '../../lib/prefs';
+/** Settings › Appearance (theme, list density, images) and Reader typography + behaviour. Per-device prefs (lib/prefs). */
+import { FONT_FAMILIES, fontStack, setPref, THEMES, usePrefs, type Prefs, type ReaderMode } from '../../lib/prefs';
 import { Section, Segmented, Switch } from './ui';
-
-const THEMES: { value: Theme; label: string }[] = [
-  { value: 'system', label: 'System' },
-  { value: 'light', label: 'Light' },
-  { value: 'dark', label: 'Dark' },
-  { value: 'eink', label: 'E-ink' },
-];
 
 export function AppearanceSection() {
   const prefs = usePrefs();
@@ -16,7 +9,10 @@ export function AppearanceSection() {
       <div className="set-field">
         <span className="set-label">Theme</span>
         <Segmented big label="Theme" value={prefs.theme} options={THEMES} onChange={(v) => setPref('theme', v)} />
-        <p className="small muted set-note">E-ink is for black &amp; white e-readers: pure black on white, no animations, bigger buttons, page turns in the reader.</p>
+        <p className="small muted set-note">
+          Sepia is warm paper for long reading. E-ink is for black &amp; white e-readers: pure black on white, no animations, bigger buttons, page
+          turns in the reader.
+        </p>
       </div>
       <div className="set-field">
         <span className="set-label">List density</span>
@@ -35,11 +31,7 @@ export function AppearanceSection() {
   );
 }
 
-const FONTS: { value: FontFamily; label: string; css: string }[] = [
-  { value: 'serif', label: 'Serif', css: 'var(--font-serif)' },
-  { value: 'sans', label: 'Sans', css: 'var(--font-sans)' },
-  { value: 'mono', label: 'Mono', css: 'var(--font-mono)' },
-];
+const FONTS = FONT_FAMILIES.map((f) => ({ ...f, css: fontStack(f.value) }));
 
 const MODES: { value: ReaderMode; label: string }[] = [
   { value: 'scroll', label: 'Scroll' },
@@ -102,6 +94,7 @@ export function ReaderSection() {
       <div className="set-field">
         <span className="set-label">Font</span>
         <Segmented
+          wrap
           label="Font"
           value={prefs.fontFamily}
           options={FONTS.map((f) => ({ value: f.value, label: f.label, style: { fontFamily: f.css } }))}
@@ -111,12 +104,19 @@ export function ReaderSection() {
       <Stepper label="Text size" prefKey="fontSize" value={prefs.fontSize} min={14} max={28} step={1} format={(v) => `${v}px`} />
       <Stepper label="Line spacing" prefKey="lineHeight" value={prefs.lineHeight} min={1.3} max={2} step={0.1} format={(v) => v.toFixed(1)} />
       <Stepper label="Line width" prefKey="width" value={prefs.width} min={50} max={90} step={2} format={(v) => `${v} characters`} />
+      <p className="small muted set-note">Literata is a book typeface made for screens; Atkinson Hyperlegible is designed for easy reading with low vision.</p>
       <Switch label="Justify text" description="Align both edges of each paragraph." checked={prefs.justify} onChange={(v) => setPref('justify', v)} />
       <div className="set-field">
         <span className="set-label">Default reading mode</span>
         <Segmented label="Default reading mode" value={prefs.readerMode} options={MODES} onChange={(v) => setPref('readerMode', v)} />
         <p className="small muted set-note">Pages turn with a tap on the left or right side of the screen, arrow keys, or the volume buttons in the Android app.</p>
       </div>
+      <Switch
+        label="Archive automatically when I reach the end"
+        description="Library items move to the Archive once you finish reading them."
+        checked={prefs.autoArchive}
+        onChange={(v) => setPref('autoArchive', v)}
+      />
       <div className="set-preview" aria-label="Preview">
         <p
           style={{

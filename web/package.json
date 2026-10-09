@@ -15,12 +15,15 @@
     "capacitor:copy:after": "node ../scripts/cap-strip-sw.mjs"
   },
   "dependencies": {
+    "@capacitor-community/text-to-speech": "^8.0.2",
     "@capacitor/android": "^8.5.3",
     "@capacitor/app": "^8.1.2",
     "@capacitor/browser": "^8.0.5",
     "@capacitor/core": "^8.5.3",
     "@capacitor/ios": "^8.5.3",
     "@capacitor/preferences": "^8.0.1",
+    "@fontsource/atkinson-hyperlegible": "^5.3.0",
+    "@fontsource/literata": "^5.3.0",
     "dompurify": "^3.4.16",
     "firebase": "^13.0.0",
     "pdfjs-dist": "^6.4.299",

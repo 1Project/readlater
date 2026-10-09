@@ -1,25 +1,30 @@
 /**
- * Floating "Highlight" / "Highlight + note" bar shown while text inside the article is selected.
- * Near the selection with a fine pointer; fixed at the bottom on touch screens so it does not fight
- * the native selection menu.
+ * Floating "Highlight" / "Highlight + note" bar shown while text inside the article is selected, with
+ * the colour for new highlights. Near the selection with a fine pointer; fixed at the bottom on touch
+ * screens so it does not fight the native selection menu.
  *
  * export default SelectionBar
  * Props: {
  *   getRoot: () => HTMLElement | null           the content root; selections outside it are ignored
  *   onHighlight: (range: Range, withNote: boolean) => void
+ *   color: HighlightColor; onColor: (c) => void  colour picker state (the reader remembers the last one)
  * }
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Highlight, Note } from '../components/Icons';
+import type { HighlightColor } from '../lib/types';
+import { ColorPicker } from './HighlightColors';
 
 export interface SelectionBarProps {
   getRoot: () => HTMLElement | null;
   onHighlight: (range: Range, withNote: boolean) => void;
+  color: HighlightColor;
+  onColor: (c: HighlightColor) => void;
 }
 
 interface BarState {
-  top?: number;
-  left?: number;
+  /** Selection rectangle (fine pointer); the bar is placed above it, or below when there is no room. */
+  rect?: { top: number; bottom: number; centerX: number };
 }
 
 function coarse(): boolean {
@@ -37,14 +42,28 @@ export function selectionRangeIn(root: HTMLElement | null): Range | null {
   return range;
 }
 
-const BAR_W = 300;
+const MARGIN = 8;
 
-export default function SelectionBar({ getRoot, onHighlight }: SelectionBarProps) {
+export default function SelectionBar({ getRoot, onHighlight, color, onColor }: SelectionBarProps) {
   const [state, setState] = useState<BarState | null>(null);
   const rangeRef = useRef<Range | null>(null);
   const hideTimer = useRef(0);
   const getRootRef = useRef(getRoot);
   getRootRef.current = getRoot;
+  const barRef = useRef<HTMLDivElement>(null);
+
+  // Place the floating bar from its real size (it wraps to two rows on narrow screens).
+  useLayoutEffect(() => {
+    const el = barRef.current;
+    const r = state?.rect;
+    if (!el || !r) return;
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    const left = Math.max(MARGIN, Math.min(window.innerWidth - w - MARGIN, r.centerX - w / 2));
+    const top = r.top - h - MARGIN >= 64 ? r.top - h - MARGIN : Math.max(MARGIN, Math.min(window.innerHeight - h - MARGIN, r.bottom + 10));
+    el.style.left = `${left}px`;
+    el.style.top = `${top}px`;
+  }, [state]);
 
   useEffect(() => {
     let raf = 0;
@@ -70,10 +89,7 @@ export default function SelectionBar({ getRoot, onHighlight }: SelectionBarProps
           return;
         }
         const r = range.getBoundingClientRect();
-        const width = Math.min(BAR_W, window.innerWidth - 16);
-        const left = Math.max(8, Math.min(window.innerWidth - width - 8, r.left + r.width / 2 - width / 2));
-        const top = r.top > 72 ? r.top - 56 : Math.min(window.innerHeight - 56, r.bottom + 10);
-        setState({ top, left });
+        setState({ rect: { top: r.top, bottom: r.bottom, centerX: r.left + r.width / 2 } });
       });
     };
     document.addEventListener('selectionchange', update);
@@ -97,11 +113,23 @@ export default function SelectionBar({ getRoot, onHighlight }: SelectionBarProps
     if (range) onHighlight(range, withNote);
   };
 
-  const positioned = state.top != null;
+  // A tap on a colour can clear the selection on touch screens: put it back so the bar stays usable.
+  const pickColor = (c: HighlightColor) => {
+    onColor(c);
+    window.clearTimeout(hideTimer.current);
+    const saved = rangeRef.current;
+    if (saved && !selectionRangeIn(getRootRef.current())) {
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(saved);
+    }
+  };
+
+  const positioned = !!state.rect;
   return (
     <div
+      ref={barRef}
       className={`selection-bar${positioned ? ' selection-bar-float' : ' selection-bar-bottom'}`}
-      style={positioned ? { top: state.top, left: state.left } : undefined}
       role="toolbar"
       aria-label="Selection"
       // Keep the selection when pressing the buttons with a mouse.
@@ -111,6 +139,7 @@ export default function SelectionBar({ getRoot, onHighlight }: SelectionBarProps
       }}
       onMouseDown={(e) => e.preventDefault()}
     >
+      <ColorPicker value={color} onChange={pickColor} />
       <button type="button" className="btn" onClick={() => act(false)}>
         <Highlight /> Highlight
       </button>

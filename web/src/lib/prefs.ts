@@ -1,8 +1,13 @@
 import { useSyncExternalStore } from 'react';
 
-/** Per-device preferences, stored in localStorage under `rl.<key>`. */
-export type Theme = 'system' | 'light' | 'dark' | 'eink';
-export type FontFamily = 'serif' | 'sans' | 'mono';
+/**
+ * Per-device preferences, stored in localStorage under `rl.<key>`.
+ *
+ * Exports: types Theme, FontFamily, ReaderMode, Prefs; DEFAULT_PREFS; getPrefs(); setPref(key, value); usePrefs();
+ * applyTheme(); THEMES and FONT_FAMILIES ({ value, label }[] for pickers); fontStack(family) → CSS font-family value.
+ */
+export type Theme = 'system' | 'light' | 'dark' | 'sepia' | 'eink';
+export type FontFamily = 'serif' | 'sans' | 'mono' | 'literata' | 'atkinson';
 export type ReaderMode = 'scroll' | 'paginate';
 
 export interface Prefs {
@@ -15,6 +20,8 @@ export interface Prefs {
   readerMode: ReaderMode;
   listDensity: 'comfortable' | 'compact';
   showImages: boolean;
+  /** Archive a library item automatically when the reader reaches its end. */
+  autoArchive: boolean;
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -27,20 +34,60 @@ export const DEFAULT_PREFS: Prefs = {
   readerMode: 'scroll',
   listDensity: 'comfortable',
   showImages: true,
+  autoArchive: false,
 };
+
+export const THEMES: { value: Theme; label: string }[] = [
+  { value: 'system', label: 'System' },
+  { value: 'light', label: 'Light' },
+  { value: 'sepia', label: 'Sepia' },
+  { value: 'dark', label: 'Dark' },
+  { value: 'eink', label: 'E-ink' },
+];
+
+export const FONT_FAMILIES: { value: FontFamily; label: string }[] = [
+  { value: 'serif', label: 'Serif' },
+  { value: 'sans', label: 'Sans' },
+  { value: 'mono', label: 'Mono' },
+  { value: 'literata', label: 'Literata' },
+  { value: 'atkinson', label: 'Atkinson' },
+];
+
+/**
+ * CSS font-family value for a reader font (the variables are defined in styles.css; Literata and Atkinson
+ * Hyperlegible are bundled web fonts). Unknown values fall back to the serif stack.
+ */
+export function fontStack(family: FontFamily | string): string {
+  return FONT_FAMILIES.some((f) => f.value === family) ? `var(--font-${family})` : 'var(--font-serif)';
+}
 
 const listeners = new Set<() => void>();
 
 function read<K extends keyof Prefs>(key: K): Prefs[K] {
   try {
     const raw = localStorage.getItem(`rl.${key}`);
-    if (raw != null) return JSON.parse(raw) as Prefs[K];
+    if (raw != null) {
+      const v = JSON.parse(raw) as Prefs[K];
+      if (valid(key, v)) return v;
+    }
   } catch {
     /* ignore */
   }
   // e-ink default: paginate when the theme is eink and the user never chose.
   if (key === 'readerMode' && read('theme') === 'eink') return 'paginate' as Prefs[K];
   return DEFAULT_PREFS[key];
+}
+
+/** Ignore stored values this version does not understand (e.g. written by a newer build). */
+function valid<K extends keyof Prefs>(key: K, v: unknown): boolean {
+  switch (key) {
+    case 'theme':
+      return THEMES.some((t) => t.value === v);
+    case 'fontFamily':
+      return FONT_FAMILIES.some((f) => f.value === v);
+    default:
+      return typeof v === typeof DEFAULT_PREFS[key];
+  }
 }
 
 let snapshot: Prefs = computeSnapshot();
@@ -87,7 +134,8 @@ export function applyTheme(): void {
   root.dataset.scheme = dark ? 'dark' : 'light';
   const meta = document.querySelector('meta[name="theme-color"]') ?? document.head.appendChild(document.createElement('meta'));
   meta.setAttribute('name', 'theme-color');
-  meta.setAttribute('content', dark ? '#111111' : '#ffffff');
+  // Keep in sync with --bg in styles.css.
+  meta.setAttribute('content', dark ? '#121214' : t === 'sepia' ? '#f4ecd8' : '#ffffff');
 }
 
 if (typeof window !== 'undefined') {

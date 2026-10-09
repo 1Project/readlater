@@ -20,7 +20,7 @@ import './settings.css';
 
 const PAGE = 30;
 
-function HighlightCard({ h }: { h: Highlight }) {
+function HighlightCard({ h, linked }: { h: Highlight; linked: boolean }) {
   const toast = useToast();
   const confirm = useConfirm();
   const [editing, setEditing] = useState(false);
@@ -41,7 +41,15 @@ function HighlightCard({ h }: { h: Highlight }) {
 
   return (
     <li className="hls-card">
-      <blockquote className="hls-quote">{h.text}</blockquote>
+      <blockquote className="hls-quote" data-color={h.color ?? 'yellow'}>
+        {linked ? (
+          <RouterLink className="hls-quote-link" to={`/item/${encodeURIComponent(h.itemId)}?hl=${encodeURIComponent(h.id)}`} title="Open in document">
+            {h.text}
+          </RouterLink>
+        ) : (
+          h.text
+        )}
+      </blockquote>
       {editing ? (
         <div className="hls-note-edit">
           <textarea
@@ -119,7 +127,7 @@ function Group({ g }: { g: ItemHighlights }) {
       {source ? <p className="small muted hls-source">{source}</p> : null}
       <ul className="hls-list">
         {g.highlights.map((h) => (
-          <HighlightCard key={h.id} h={h} />
+          <HighlightCard key={h.id} h={h} linked={!!g.item} />
         ))}
       </ul>
     </section>
@@ -173,6 +181,11 @@ export default function Highlights() {
       <div className="page-head">
         <h1 className="set-title">Highlights</h1>
         <span className="spacer" />
+        {groups.length ? (
+          <RouterLink className="btn btn-small" to="/review">
+            Daily review
+          </RouterLink>
+        ) : null}
         <button type="button" className="btn btn-small" onClick={exportMd} disabled={!shown.length}>
           <Download size={18} /> Export Markdown
         </button>

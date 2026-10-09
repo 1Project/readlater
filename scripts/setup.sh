@@ -7,7 +7,8 @@
 # Needs: Node.js 22+, npm, the Google Cloud CLI (gcloud), curl. firebase-tools comes from the repo
 # (npm ci at the repo root) unless a global `firebase` exists.
 # Non-interactive use (no TTY or --yes): defaults are taken; set PROJECT_ID / FIRESTORE_LOCATION /
-# STORAGE_LOCATION to override them.
+# STORAGE_LOCATION to override them, and READLATER_ANTHROPIC_API_KEY / READLATER_TELEGRAM_BOT_TOKEN /
+# READLATER_INBOUND_EMAIL_DOMAIN to switch on the optional integrations (all skipped otherwise).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -21,7 +22,7 @@ while [[ $# -gt 0 ]]; do
     --project|-p) PROJECT="${2:?--project needs a value}"; shift 2 ;;
     --location) FS_LOCATION="${2:?--location needs a value}"; shift 2 ;;
     --yes|-y) ASSUME_YES=1; shift ;;
-    -h|--help) sed -n '2,11p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
     *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
 done
@@ -191,7 +192,8 @@ else
   [[ -n "$FS_LOCATION" ]] || FS_LOCATION="$(ask "Firestore location (nam5 = US multi-region, eur3 = Europe, or a region like europe-west1)" "nam5")"
   gcloud firestore databases create --database='(default)' --location="$FS_LOCATION" --type=firestore-native --project "$PROJECT"
 fi
-for cg in loginCodes rateLimits telegramLinks; do
+# The same TTL policies are in firestore.indexes.json, so `firebase deploy --force` keeps them.
+for cg in loginCodes rateLimits telegramLinks telegramUpdates emailDedupe feedSeen; do
   if gcloud firestore fields ttls list --database='(default)' --collection-group="$cg" --project "$PROJECT" --format='value(ttlConfig.state)' 2>/dev/null | grep -qE 'ACTIVE|CREATING'; then
     info "TTL on $cg.expiresAt already set."
   else
@@ -280,43 +282,143 @@ node -e '
 info "Wrote .firebaserc (default: $PROJECT; emulators keep using demo-readlater)"
 
 # ---------------------------------------------------------------------------
-say "Optional integrations (AI summaries, Telegram bot, email newsletters)"
+say "Optional integrations (AI, Telegram bot, email newsletters)"
+# Plain settings go to functions/.env.<project> (git-ignored, read by `firebase deploy` and by the functions at
+# runtime); secrets go to Cloud Secret Manager. A secret is bound to the functions only while its feature flag
+# is in that file (AI_ENABLED, TELEGRAM_BOT_USERNAME, INBOUND_EMAIL_DOMAIN — see functions/src/integrations.ts),
+# so a skipped or switched-off integration never blocks a deploy.
 FUNCTIONS_ENV="$ROOT/functions/.env.$PROJECT"
 secret_exists() { gcloud secrets describe "$1" --project "$PROJECT" >/dev/null 2>&1; }
 set_secret() { printf '%s' "$2" | "${FIREBASE[@]}" functions:secrets:set "$1" --data-file=- --project "$PROJECT" --force >/dev/null; }
-set_env() {
-  touch "$FUNCTIONS_ENV"
+read_secret() { { "${FIREBASE[@]}" functions:secrets:access "$1" --project "$PROJECT" 2>/dev/null || true; } | tr -d '\r\n'; }
+env_get() { [[ -f "$FUNCTIONS_ENV" ]] && sed -n "s/^$1=//p" "$FUNCTIONS_ENV" | tail -1 || true; }
+env_unset() {
+  [[ -f "$FUNCTIONS_ENV" ]] || return 0
   grep -v "^$1=" "$FUNCTIONS_ENV" > "$FUNCTIONS_ENV.tmp" || true
-  echo "$1=$2" >> "$FUNCTIONS_ENV.tmp"
   mv "$FUNCTIONS_ENV.tmp" "$FUNCTIONS_ENV"
 }
-random_secret() { LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 40 || true; }
-if [[ "$INTERACTIVE" -eq 1 ]] && confirm "Configure optional integrations now? (you can re-run this script later)" n; then
-  if secret_exists ANTHROPIC_API_KEY; then info "ANTHROPIC_API_KEY is set."; else
-    V="$(ask_secret "Anthropic API key for AI summaries / Q&A (empty = skip)")"
-    [[ -z "$V" ]] || { set_secret ANTHROPIC_API_KEY "$V"; info "Saved ANTHROPIC_API_KEY."; }
+env_set() {
+  if [[ ! -f "$FUNCTIONS_ENV" ]]; then
+    {
+      echo "# Cloud Functions settings for $PROJECT, written by scripts/setup.sh (git-ignored)."
+      echo "# Secrets are not stored here: they live in Secret Manager (firebase functions:secrets:*)."
+    } > "$FUNCTIONS_ENV"
   fi
-  if secret_exists TELEGRAM_BOT_TOKEN; then info "TELEGRAM_BOT_TOKEN is set."; else
-    info "Telegram: create a bot with @BotFather and paste its token."
-    V="$(ask_secret "Telegram bot token (empty = skip)")"
-    if [[ -n "$V" ]]; then
-      set_secret TELEGRAM_BOT_TOKEN "$V"
-      secret_exists TELEGRAM_WEBHOOK_SECRET || set_secret TELEGRAM_WEBHOOK_SECRET "$(random_secret)"
-      BOT="$(curl -sS "https://api.telegram.org/bot$V/getMe" | node -e '
-        let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).result.username||"")}catch{}})')"
-      [[ -n "$BOT" ]] || BOT="$(ask "Bot username (without @)" "")"
-      [[ -z "$BOT" ]] || set_env TELEGRAM_BOT_USERNAME "$BOT"
-      info "Saved the Telegram bot settings${BOT:+ (@$BOT)}."
+  env_unset "$1"
+  echo "$1=$2" >> "$FUNCTIONS_ENV"
+}
+random_secret() { LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 40 || true; }
+# telegram_username <bot token> -> the bot's username (empty if Telegram rejects the token)
+telegram_username() {
+  { curl -sS --max-time 20 "https://api.telegram.org/bot$1/getMe" 2>/dev/null || true; } | node -e '
+    let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const r=JSON.parse(s);process.stdout.write(r.ok&&r.result.username||"")}catch{}})'
+}
+integration_status() {
+  local ai tg em
+  ai="off"; [[ "$(env_get AI_ENABLED)" == "1" ]] && ai="on"
+  tg="$(env_get TELEGRAM_BOT_USERNAME)"; tg="${tg:+@$tg}"
+  em="$(env_get INBOUND_EMAIL_DOMAIN)"
+  info "AI (summaries, Q&A, tag suggestions): $ai"
+  info "Telegram bot: ${tg:-off}"
+  info "Email newsletters: ${em:-off}"
+}
+
+setup_ai() {
+  local key="${READLATER_ANTHROPIC_API_KEY:-}"
+  if [[ "$INTERACTIVE" -eq 1 ]]; then
+    if secret_exists ANTHROPIC_API_KEY; then
+      if [[ "$(env_get AI_ENABLED)" == "1" ]]; then
+        if ! confirm "Keep AI features on?" y; then env_unset AI_ENABLED; info "AI turned off (the key stays in Secret Manager)."; return; fi
+        confirm "Replace the stored Anthropic API key?" n || return 0
+      elif ! confirm "An Anthropic API key is stored. Turn AI features on?" y; then
+        return 0
+      fi
+    fi
+    if [[ -z "$key" ]] && ! { secret_exists ANTHROPIC_API_KEY && [[ "$(env_get AI_ENABLED)" != "1" ]]; }; then
+      info "AI summaries, questions about a document and tag suggestions use the Anthropic API"
+      info "(key from https://console.anthropic.com/settings/keys; usage is billed by Anthropic)."
+      key="$(ask_secret "Anthropic API key (empty = skip)")"
+      [[ -n "$key" ]] || { info "AI: skipped."; return 0; }
     fi
   fi
-  V="$(ask "Inbound email domain for newsletters (empty = skip)" "")"
-  if [[ -n "$V" ]]; then
-    set_env INBOUND_EMAIL_DOMAIN "$V"
-    secret_exists INBOUND_EMAIL_SECRET || set_secret INBOUND_EMAIL_SECRET "$(random_secret)"
-    info "Saved INBOUND_EMAIL_DOMAIN=$V (webhook secret: ${FIREBASE[*]} functions:secrets:access INBOUND_EMAIL_SECRET)."
+  if [[ -n "$key" ]]; then
+    [[ "$key" == sk-ant-* ]] || warn "That does not look like an Anthropic API key (sk-ant-…); saving it anyway."
+    set_secret ANTHROPIC_API_KEY "$key"
+    info "Saved ANTHROPIC_API_KEY in Secret Manager."
   fi
-else
-  info "Skipped."
+  if secret_exists ANTHROPIC_API_KEY; then
+    env_set AI_ENABLED 1
+    info "AI: on."
+  fi
+}
+
+setup_telegram() {
+  local token="${READLATER_TELEGRAM_BOT_TOKEN:-}" bot cur
+  cur="$(env_get TELEGRAM_BOT_USERNAME)"
+  if [[ "$INTERACTIVE" -eq 1 ]]; then
+    if [[ -n "$cur" ]] && secret_exists TELEGRAM_BOT_TOKEN; then
+      if ! confirm "Keep the Telegram bot @$cur?" y; then env_unset TELEGRAM_BOT_USERNAME; info "Telegram turned off (the token stays in Secret Manager)."; return; fi
+      confirm "Replace the bot token?" n || return 0
+    fi
+    if [[ -z "$token" ]]; then
+      info "Telegram: in Telegram talk to @BotFather → /newbot, then paste the token it gives you."
+      token="$(ask_secret "Telegram bot token (empty = skip)")"
+    fi
+    if [[ -z "$token" ]] && [[ -z "$cur" ]] && secret_exists TELEGRAM_BOT_TOKEN && confirm "A bot token is stored. Turn the Telegram bot on with it?" y; then
+      token="$(read_secret TELEGRAM_BOT_TOKEN)"
+    fi
+  fi
+  [[ -n "$token" ]] || { [[ -n "$cur" ]] || info "Telegram: skipped."; return 0; }
+  bot="$(telegram_username "$token")"
+  if [[ -z "$bot" ]]; then
+    warn "Telegram did not accept that token (or could not be reached); the bot was not set up."
+    return 0
+  fi
+  [[ "$token" == "$(secret_exists TELEGRAM_BOT_TOKEN && read_secret TELEGRAM_BOT_TOKEN)" ]] || set_secret TELEGRAM_BOT_TOKEN "$token"
+  secret_exists TELEGRAM_WEBHOOK_SECRET || set_secret TELEGRAM_WEBHOOK_SECRET "$(random_secret)"
+  env_set TELEGRAM_BOT_USERNAME "$bot"
+  info "Telegram bot: @$bot (the webhook is registered after the deploy)."
+}
+
+setup_email() {
+  local cur dom
+  cur="$(env_get INBOUND_EMAIL_DOMAIN)"
+  dom="${READLATER_INBOUND_EMAIL_DOMAIN:-$cur}"
+  if [[ "$INTERACTIVE" -eq 1 ]]; then
+    info "Email newsletters: each user gets an address <token>@<domain>; the domain's mail is handed to the"
+    info "inboundEmail function by Cloudflare Email Routing, Mailgun or SendGrid (integrations/cloudflare-email-worker)."
+    dom="$(ask "Inbound email domain, e.g. in.example.com (empty = skip${cur:+, 'off' = turn off})" "$cur")"
+  fi
+  dom="$(printf '%s' "$dom" | tr '[:upper:]' '[:lower:]' | sed 's/^@//')"
+  if [[ "$dom" == "off" ]]; then env_unset INBOUND_EMAIL_DOMAIN; info "Email newsletters turned off."; return 0; fi
+  [[ -n "$dom" ]] || { info "Email newsletters: skipped."; return 0; }
+  if [[ ! "$dom" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]]; then
+    warn "\"$dom\" is not a domain name; email newsletters were not set up."
+    return 0
+  fi
+  secret_exists INBOUND_EMAIL_SECRET || set_secret INBOUND_EMAIL_SECRET "$(random_secret)"
+  env_set INBOUND_EMAIL_DOMAIN "$dom"
+  info "Email newsletters: *@$dom → https://$REGION-$PROJECT.cloudfunctions.net/inboundEmail"
+  info "Webhook secret (X-Readlater-Secret header or ?secret=): ${FIREBASE[*]} functions:secrets:access INBOUND_EMAIL_SECRET --project $PROJECT"
+  info "Mail routing setup: integrations/cloudflare-email-worker/README.md"
+}
+
+REGION="us-central1"
+integration_status
+if [[ "$INTERACTIVE" -eq 1 ]]; then
+  if confirm "Set up or change optional integrations now? (you can re-run this script later)" n; then
+    setup_ai
+    setup_telegram
+    setup_email
+    integration_status
+  else
+    info "Unchanged."
+  fi
+elif [[ -n "${READLATER_ANTHROPIC_API_KEY:-}${READLATER_TELEGRAM_BOT_TOKEN:-}${READLATER_INBOUND_EMAIL_DOMAIN:-}" ]]; then
+  [[ -z "${READLATER_ANTHROPIC_API_KEY:-}" ]] || setup_ai
+  [[ -z "${READLATER_TELEGRAM_BOT_TOKEN:-}" ]] || setup_telegram
+  [[ -z "${READLATER_INBOUND_EMAIL_DOMAIN:-}" ]] || setup_email
+  integration_status
 fi
 
 # ---------------------------------------------------------------------------
@@ -349,6 +451,24 @@ if [[ "$INTERACTIVE" -eq 1 ]] && confirm "Create a deploy service account key fo
     fi
   else
     warn "Key creation failed (an organization policy may forbid service account keys)."
+  fi
+fi
+
+# The deploy workflow writes functions/.env.<project> from the FUNCTIONS_ENV variable, so deploys from
+# GitHub Actions keep the optional integrations switched on. Only the known, non-secret settings are copied.
+functions_env_vars() {
+  [[ -f "$FUNCTIONS_ENV" ]] || return 0
+  grep -E '^(AI_ENABLED|TELEGRAM_BOT_USERNAME|INBOUND_EMAIL_DOMAIN|PUBLIC_URL|ANTHROPIC_MODEL)=' "$FUNCTIONS_ENV" || true
+}
+FUNCTIONS_ENV_VARS="$(functions_env_vars)"
+if [[ -n "$FUNCTIONS_ENV_VARS" ]]; then
+  if [[ "$INTERACTIVE" -eq 1 ]] && command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1 && (cd "$ROOT" && gh repo view >/dev/null 2>&1); then
+    if confirm "Copy the integration settings to the GitHub variable FUNCTIONS_ENV (for deploys from GitHub Actions)?" y; then
+      (cd "$ROOT" && gh variable set FUNCTIONS_ENV --body "$FUNCTIONS_ENV_VARS") && info "Saved the GitHub variable FUNCTIONS_ENV."
+    fi
+  else
+    info "For deploys from GitHub Actions, add a repository variable FUNCTIONS_ENV with these lines:"
+    printf '%s\n' "$FUNCTIONS_ENV_VARS" | sed 's/^/      /'
   fi
 fi
 

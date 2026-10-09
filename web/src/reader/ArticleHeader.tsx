@@ -39,7 +39,10 @@ export default function ArticleHeader({ item, categories, onEdit, children }: { 
   const date = formatDate(item.publishedAt);
   const time = tweet ? '' : readingTime(item);
   const authors = paper?.authors?.filter(Boolean) ?? [];
-  const showAuthor = item.author && !(authors.length && authors.join(', ').includes(item.author));
+  // Papers list their authors above; "Niki Parmar et al." would repeat them.
+  const showAuthor = item.author && !authors.length;
+  // A full publication date in the byline makes the year in the venue line redundant.
+  const venue = paper ? [paper.venue, date ? null : paper.year].filter(Boolean).join(' · ') : '';
   const byline = [showAuthor ? item.author : null, site, date, time].filter(Boolean).join(' · ');
   const category = item.categoryId ? categories?.find((c) => c.id === item.categoryId) : undefined;
   const arxiv = paper?.arxivId ? `https://arxiv.org/abs/${paper.arxivId}` : null;
@@ -47,12 +50,8 @@ export default function ArticleHeader({ item, categories, onEdit, children }: { 
 
   return (
     <header className={`article-header${tweet ? ' article-header-compact' : ''}`}>
-      {tweet ? (
-        <p className="article-byline">
-          <strong>{item.author || site || 'Post'}</strong>
-          {date ? <span> · {date}</span> : null}
-        </p>
-      ) : (
+      {/* A post's content starts with its author and date (extractor), so the header shows only the links. */}
+      {tweet ? null : (
         <>
           <h1 className="article-title">{item.title || 'Untitled'}</h1>
           {authors.length ? (
@@ -61,7 +60,7 @@ export default function ArticleHeader({ item, categories, onEdit, children }: { 
               {authors.length > MAX_AUTHORS ? ` +${authors.length - MAX_AUTHORS} more` : ''}
             </p>
           ) : null}
-          {paper && (paper.venue || paper.year) ? <p className="article-byline">{[paper.venue, paper.year].filter(Boolean).join(' · ')}</p> : null}
+          {venue ? <p className="article-byline">{venue}</p> : null}
           {byline ? <p className="article-byline">{byline}</p> : null}
         </>
       )}

@@ -1,0 +1,12 @@
+# Cloudflare Email Worker for Readlater newsletters. See README.md.
+#   npx wrangler deploy
+#   npx wrangler secret put READLATER_SECRET      (paste your INBOUND_EMAIL_SECRET)
+name = "readlater-email"
+main = "worker.js"
+compatibility_date = "2025-09-01"
+
+[vars]
+# Replace <project> with your Firebase project id.
+READLATER_INBOUND_URL = "https://us-central1-<project>.cloudfunctions.net/inboundEmail"
+# Optional: also forward every message to an address verified in Email Routing.
+# FORWARD_TO = "you@example.com"

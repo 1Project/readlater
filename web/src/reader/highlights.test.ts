@@ -237,4 +237,16 @@ describe('applyHighlights', () => {
     expect(root.querySelector('math mark')).toBeNull();
     expect(root.querySelectorAll('mark').length).toBeGreaterThan(0);
   });
+
+  it('sets data-color on the marks of coloured highlights', () => {
+    const root = mount('<p>Alpha <em>beta</em> gamma delta</p>');
+    applyHighlights(root, [
+      { id: 'g', text: 'Alpha beta', prefix: '', suffix: '', color: 'green' },
+      { id: 'n', text: 'delta', prefix: '', suffix: '' },
+    ]);
+    const green = [...root.querySelectorAll('mark[data-hid="g"]')];
+    expect(green).toHaveLength(2);
+    green.forEach((m) => expect(m.getAttribute('data-color')).toBe('green'));
+    expect(root.querySelector('mark[data-hid="n"]')?.hasAttribute('data-color')).toBe(false);
+  });
 });

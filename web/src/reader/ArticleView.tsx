@@ -4,14 +4,16 @@
  *
  * export default ArticleView
  * Props (ArticleViewProps): see interface below.
- * Imperative handle (ArticleHandle) via `ref`: root(), goTo(el), turn(dir), progress().
+ * Imperative handle (ArticleHandle) via `ref`: root(), goTo(el), turn(dir), progress(), adoptProgress(p).
  *
  * Pages mode input: tap left 30% = previous, right 30% = next, middle = onToggleChrome; keys
- * ←/→/PageUp/PageDown/Space/Shift+Space; window `hwpage` CustomEvent {detail:{dir}} (both modes; in
- * scroll mode it scrolls by about one screen). Taps are ignored while text is selected so long-press
- * selection for highlighting keeps working.
+ * ←/→/PageUp/PageDown/Space/Shift+Space, Home/End (first / last page); the page indicator ("3 / 67") is a
+ * button that opens "Go to page" (number, Start, End); window `hwpage` CustomEvent {detail:{dir}} (both
+ * modes; in scroll mode it scrolls by about one screen). Taps are ignored while text is selected so
+ * long-press selection for highlighting keeps working.
  */
 import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode, type Ref } from 'react';
+import Dialog from '../components/Dialog';
 import { isTypingTarget } from '../components/ItemList';
 import type { ReaderMode } from '../lib/prefs';
 import { isNative, openExternal } from '../native';
@@ -27,6 +29,11 @@ export interface ArticleHandle {
   turn(dir: 1 | -1): void;
   /** Current reading progress 0..1. */
   progress(): number;
+  /**
+   * A newer saved position arrived (e.g. from another device) before the reader moved: go there. Ignored
+   * once the user has scrolled or turned a page.
+   */
+  adoptProgress(p: number): void;
 }
 
 export interface ArticleViewProps {
@@ -65,6 +72,7 @@ export default function ArticleView(props: ArticleViewProps) {
   const endRef = useRef<HTMLDivElement>(null);
   const [page, setPage] = useState(0);
   const [pages, setPages] = useState(1);
+  const [jump, setJump] = useState<string | null>(null);
 
   // Latest props for event handlers bound once.
   const cb = useRef(props);
@@ -85,6 +93,8 @@ export default function ArticleView(props: ArticleViewProps) {
     anchor: null as Range | Element | null,
     /** Next layout keeps the page index (highlight-only changes: the anchor's text node may be gone). */
     keepPage: false,
+    /** The user scrolled, turned a page or jumped: positions from elsewhere no longer apply. */
+    moved: false,
   });
 
   const restoreActive = () => {
@@ -95,6 +105,7 @@ export default function ArticleView(props: ArticleViewProps) {
 
   const report = (p: number) => {
     st.current.progress = p;
+    st.current.moved = true;
     cb.current.onProgress(p);
   };
 
@@ -164,7 +175,9 @@ export default function ArticleView(props: ArticleViewProps) {
 
   // ------------------------------------------------------------------ content + highlights
 
-  const hlKey = highlights.map((h) => `${h.id}\u0001${h.text}\u0001${h.prefix}\u0001${h.suffix}\u0001${h.note?.trim() ? 1 : 0}`).join('\u0002');
+  const hlKey = highlights
+    .map((h) => `${h.id}\u0001${h.text}\u0001${h.prefix}\u0001${h.suffix}\u0001${h.note?.trim() ? 1 : 0}\u0001${h.color ?? ''}`)
+    .join('\u0002');
 
   useLayoutEffect(() => {
     const root = rootRef.current;
@@ -309,13 +322,44 @@ export default function ArticleView(props: ArticleViewProps) {
     [showPage], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
-  useImperativeHandle(ref, () => ({ root: () => rootRef.current, goTo, turn, progress: () => st.current.progress }), [goTo, turn]);
+  /** Show page `p` (0-based, clamped) — Home / End / "Go to page". */
+  const goToPage = useCallback(
+    (p: number) => {
+      const s = st.current;
+      if (s.mode !== 'paginate') return;
+      s.restore = null;
+      const next = clampPage(p, s.pages);
+      if (next === s.page) return;
+      showPage(next);
+      report(pageToProgress(next, s.pages));
+      cb.current.onPageTurn?.();
+    },
+    [showPage], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  const adoptProgress = useCallback(
+    (p: number) => {
+      const s = st.current;
+      if (s.moved || !(p >= 0 && p <= 1)) return;
+      s.progress = p;
+      s.restore = { progress: p, until: Date.now() + RESTORE_MS };
+      scheduleLayout();
+    },
+    [scheduleLayout],
+  );
+
+  useImperativeHandle(ref, () => ({ root: () => rootRef.current, goTo, turn, progress: () => st.current.progress, adoptProgress }), [goTo, turn, adoptProgress]);
 
   // Keys (pages mode) and hardware page buttons (both modes).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (st.current.mode !== 'paginate' || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
       if (isTypingTarget(e.target) || dialogOpen()) return;
+      if (e.key === 'Home' || e.key === 'End') {
+        e.preventDefault();
+        goToPage(e.key === 'Home' ? 0 : st.current.pages - 1);
+        return;
+      }
       let dir: 1 | -1 | 0 = 0;
       if (e.key === 'ArrowRight' || e.key === 'PageDown' || (e.key === ' ' && !e.shiftKey)) dir = 1;
       else if (e.key === 'ArrowLeft' || e.key === 'PageUp' || (e.key === ' ' && e.shiftKey)) dir = -1;
@@ -335,7 +379,7 @@ export default function ArticleView(props: ArticleViewProps) {
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('hwpage', onHw);
     };
-  }, [turn]);
+  }, [turn, goToPage]);
 
   // ------------------------------------------------------------------ taps
 
@@ -347,6 +391,8 @@ export default function ArticleView(props: ArticleViewProps) {
   const onClick = (e: MouseEvent<HTMLDivElement>) => {
     if (e.defaultPrevented) return;
     const t = e.target as Element;
+    // Clicks inside the "Go to page" dialog (a portal) bubble here through React, but are not taps on the page.
+    if (!e.currentTarget.contains(t)) return;
     const sel = window.getSelection();
     const hasSel = (!!sel && !sel.isCollapsed && sel.toString().trim().length > 0) || st.current.selAtDown;
     st.current.selAtDown = false;
@@ -383,10 +429,70 @@ export default function ArticleView(props: ArticleViewProps) {
         </div>
       </div>
       {paged ? (
-        <div className="page-indicator" aria-live="polite">
-          {page + 1} / {pages}
+        <div className="page-indicator">
+          <button
+            type="button"
+            className="page-indicator-button"
+            aria-label={`Page ${page + 1} of ${pages}. Go to page…`}
+            title="Go to page"
+            onClick={() => setJump(String(page + 1))}
+          >
+            {page + 1} / {pages}
+          </button>
         </div>
       ) : null}
+      <Dialog
+        open={jump !== null}
+        onClose={() => setJump(null)}
+        title="Go to page"
+        className="page-jump-dialog"
+        onSubmit={() => {
+          const n = Number(jump);
+          if (Number.isFinite(n) && n >= 1) goToPage(Math.round(n) - 1);
+          setJump(null);
+        }}
+        footer={
+          <>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                goToPage(0);
+                setJump(null);
+              }}
+            >
+              Start
+            </button>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                goToPage(pages - 1);
+                setJump(null);
+              }}
+            >
+              End
+            </button>
+            <button type="submit" className="btn btn-primary">
+              Go
+            </button>
+          </>
+        }
+      >
+        <label className="field">
+          <span className="field-label">Page (1–{pages})</span>
+          <input
+            className="input"
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={pages}
+            value={jump ?? ''}
+            onChange={(e) => setJump(e.target.value)}
+            data-autofocus=""
+          />
+        </label>
+      </Dialog>
     </div>
   );
 }

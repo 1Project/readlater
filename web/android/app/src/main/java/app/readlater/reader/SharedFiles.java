@@ -60,6 +60,49 @@ final class SharedFiles {
         return base;
     }
 
+    /**
+     * Whether a shared / opened URI may be read. Only content:// URIs of other apps: a file:// path or a URI
+     * of our own providers (authority = our package name, or starts with it) could make the app read and
+     * upload its own private files (the signed-in session, the offline library).
+     */
+    static boolean isAllowedSource(String scheme, String authority, String ownPackage) {
+        if (!"content".equalsIgnoreCase(scheme)) return false;
+        if (authority == null || authority.isEmpty()) return false;
+        String a = authority.toLowerCase(Locale.ROOT);
+        String own = ownPackage == null ? "" : ownPackage.toLowerCase(Locale.ROOT);
+        return own.isEmpty() || !(a.equals(own) || a.startsWith(own + "."));
+    }
+
+    /** Bytes needed by {@link #looksLike}. */
+    static final int SNIFF_BYTES = 1024;
+
+    /**
+     * The first bytes of a file match its type: "%PDF-" within the first 1024 bytes (PDF), or a ZIP whose
+     * first entry is the stored "mimetype" file with "application/epub+zip" (EPUB, as the spec requires).
+     */
+    static boolean looksLike(byte[] head, int length, String mime) {
+        int n = Math.min(length, head == null ? 0 : head.length);
+        if (MIME_PDF.equals(mime)) {
+            byte[] sig = { '%', 'P', 'D', 'F', '-' };
+            for (int i = 0; i + sig.length <= n; i++) {
+                boolean hit = true;
+                for (int k = 0; k < sig.length && hit; k++) hit = head[i + k] == sig[k];
+                if (hit) return true;
+            }
+            return false;
+        }
+        if (MIME_EPUB.equals(mime)) {
+            String expected = "mimetypeapplication/epub+zip";
+            if (n < 30 + expected.length()) return false;
+            if (head[0] != 'P' || head[1] != 'K' || head[2] != 3 || head[3] != 4) return false;
+            for (int k = 0; k < expected.length(); k++) {
+                if (head[30 + k] != expected.charAt(k)) return false;
+            }
+            return true;
+        }
+        return false;
+    }
+
     /** Delete stale files from a previous share (best effort). */
     static void pruneOld(File dir, long now) {
         File[] files = dir.listFiles();

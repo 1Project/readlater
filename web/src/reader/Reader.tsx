@@ -8,27 +8,46 @@
  * reading progress (debounced 2 s) and sets lastOpenedAt on open. Sets window.__readerActive while
  * mounted so native volume keys turn pages (window `hwpage` events).
  *
+ * SPEC-2: Listen (text-to-speech player, ListenBar), AI summary / questions (AiPanel, when
+ * useConfig().ai), public share link (ShareDialog), EPUB download, highlight colours, "Copy as
+ * Markdown" in the highlights panel, and an end-of-document footer with Archive and "Next unread →".
+ * With the autoArchive preference, a library item is archived once per open when the reader reaches
+ * its end (scroll mode: within 200 px of the bottom; pages mode / PDF: the last page), with Undo.
+ *
+ * `?hl=<highlightId>` (links from Highlights and Daily review) opens the document at that highlight.
+ * Scroll mode shows the reading progress in the toolbar ("35% · 34 min left" and a thin static line).
+ * A newer position saved on another device that arrives before the reader moved is adopted.
+ *
  * Keys: e archive · s favorite · h highlight selection · t text settings · Esc back;
- * pages mode: ←/→/PageUp/PageDown/Space/Shift+Space.
+ * pages mode: ←/→/PageUp/PageDown/Space/Shift+Space, Home/End.
  */
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
 import EditItemDialog from '../components/EditItemDialog';
 import { Back } from '../components/Icons';
 import { isTypingTarget } from '../components/ItemList';
-import { deleteWithConfirm, openOriginal, retryFetch, saveToLibrary, toggleArchive, toggleFavorite, toggleSeen } from '../components/itemActions';
+import { deleteWithConfirm, isStalled, openOriginal, retryFetch, saveToLibrary, toggleArchive, toggleFavorite, toggleSeen } from '../components/itemActions';
 import Spinner from '../components/Spinner';
-import { toast } from '../components/Toast';
-import { addHighlight, loadContent, markOpened, updateItemLater, useCategories, useHighlights, useItem } from '../lib/data';
-import { usePrefs } from '../lib/prefs';
-import type { Highlight, Item } from '../lib/types';
+import { dismissToast, toast } from '../components/Toast';
+import { useConfig } from '../lib/config';
+import { addHighlight, exportEpub, loadContent, markOpened, updateItem, updateItemLater, useCategories, useHighlights, useItem, useItems } from '../lib/data';
+import { fontStack, usePrefs } from '../lib/prefs';
+import type { Highlight, HighlightColor, Item } from '../lib/types';
+import { isNative, openExternal } from '../native';
+import AiPanel, { type AiTab } from './AiPanel';
 import ArticleHeader, { openLinkNatively } from './ArticleHeader';
 import ArticleView, { type ArticleHandle } from './ArticleView';
+import { copyText } from './clipboard';
+import { readLastColor, writeLastColor } from './HighlightColors';
 import { getSelectionQuote, type Anchorable, type Quote } from './highlights';
+import ListenBar, { ttsAvailable, type ListenHandle } from './ListenBar';
+import { documentMarkdown } from './markdown';
+import { nextUnread } from './nextUnread';
 import { ContentsPanel, HighlightDialog, HighlightsPanel, NewNoteDialog, type Chapter } from './panels';
 import ReaderToolbar, { type ReaderActions } from './ReaderToolbar';
 import { hasChapters, sanitizeContent } from './sanitize';
 import SelectionBar, { selectionRangeIn } from './SelectionBar';
+import ShareDialog from './ShareDialog';
 import TypographyPanel from './TypographyPanel';
 import './reader.css';
 
@@ -36,6 +55,8 @@ const PdfView = lazy(() => import('./PdfView'));
 
 const PDF_VIEW_KEY = 'rl.reader.pdfView';
 const SAVE_DELAY = 2000;
+/** Scroll mode: the end is reached within this distance of the bottom. */
+const END_SLACK = 200;
 
 type PdfChoice = 'text' | 'original';
 
@@ -62,6 +83,25 @@ function setReaderActive(v: boolean): void {
 
 function anyOverlayOpen(): boolean {
   return !!document.querySelector('.dialog-backdrop, .menu-list');
+}
+
+/** Toolbar buttons are 48 px in the e-ink theme; below this width Listen moves into the More menu. */
+const NARROW_QUERY = '(max-width: 399px)';
+
+function useNarrow(): boolean {
+  return useSyncExternalStore(
+    (cb) => {
+      const mq = window.matchMedia?.(NARROW_QUERY);
+      mq?.addEventListener?.('change', cb);
+      return () => mq?.removeEventListener?.('change', cb);
+    },
+    () => !!window.matchMedia?.(NARROW_QUERY).matches,
+  );
+}
+
+function errorMessage(e: unknown): string {
+  const msg = (e as { message?: unknown } | null)?.message;
+  return typeof msg === 'string' && msg.trim() ? msg.replace(/^Firebase:\s*/, '') : 'unknown error';
 }
 
 function useGoBack(fallback: string) {
@@ -129,6 +169,30 @@ const NOUN: Record<Item['type'], string> = {
   other: 'document',
 };
 
+/** Reading progress for the toolbar, outside React state so scrolling does not re-render the whole reader. */
+export interface ProgressStore {
+  get(): number;
+  set(p: number): void;
+  subscribe(cb: () => void): () => void;
+}
+
+function createProgressStore(initial: number): ProgressStore {
+  let value = initial;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => value,
+    set: (p) => {
+      if (p === value) return;
+      value = p;
+      listeners.forEach((l) => l());
+    },
+    subscribe: (cb) => {
+      listeners.add(cb);
+      return () => listeners.delete(cb);
+    },
+  };
+}
+
 function byCreated(a: Highlight, b: Highlight): number {
   const ta = a.createdAt?.toMillis?.() ?? Number.MAX_SAFE_INTEGER;
   const tb = b.createdAt?.toMillis?.() ?? Number.MAX_SAFE_INTEGER;
@@ -137,12 +201,19 @@ function byCreated(a: Highlight, b: Highlight): number {
 
 function ReaderInner({ item }: { item: Item }) {
   const prefs = usePrefs();
+  const config = useConfig();
   const categories = useCategories();
   const allHighlights = useHighlights();
+  const allItems = useItems();
+  const navigate = useNavigate();
+  const narrow = useNarrow();
   const goBackRaw = useGoBack(item.location === 'feed' ? '/feed' : '/');
   const articleRef = useRef<ArticleHandle>(null);
+  const listenRef = useRef<ListenHandle>(null);
   const itemRef = useRef(item);
   itemRef.current = item;
+  const prefsRef = useRef(prefs);
+  prefsRef.current = prefs;
 
   const [chromeVisible, setChromeVisible] = useState(true);
   const [typoOpen, setTypoOpen] = useState(false);
@@ -155,6 +226,10 @@ function ReaderInner({ item }: { item: Item }) {
   const [hlState, setHlState] = useState<{ applied: string[]; missing: string[] }>({ applied: [], missing: [] });
   const [pdfChoice, setPdfChoice] = useState<PdfChoice | null>(readPdfChoice);
   const [reload, setReload] = useState(0);
+  const [listening, setListening] = useState(false);
+  const [aiTab, setAiTab] = useState<AiTab | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [hlColor, setHlColor] = useState<HighlightColor>(readLastColor);
 
   // ------------------------------------------------------------------ open / title
 
@@ -172,6 +247,19 @@ function ReaderInner({ item }: { item: Item }) {
   const pendingProgress = useRef<number | null>(null);
   const saveTimer = useRef(0);
   const deleted = useRef(false);
+  /** The reader scrolled / turned a page since it opened (saved positions from elsewhere no longer apply). */
+  const userMoved = useRef(false);
+  const [progressStore] = useState(() => createProgressStore(item.progress));
+
+  // Snapshots can bring a newer position (another device) after the cached one we opened with: until the
+  // user moves, follow it — before the text is shown it becomes the initial position, afterwards a jump.
+  useEffect(() => {
+    if (userMoved.current || pendingProgress.current !== null) return;
+    if (Math.abs(item.progress - progressRef.current) < 0.002) return;
+    progressRef.current = item.progress;
+    progressStore.set(item.progress);
+    articleRef.current?.adoptProgress(item.progress);
+  }, [item.progress, progressStore]);
 
   const flushProgress = useCallback(() => {
     window.clearTimeout(saveTimer.current);
@@ -182,14 +270,41 @@ function ReaderInner({ item }: { item: Item }) {
     updateItemLater(itemRef.current.id, { progress: Math.round(p * 10000) / 10000 });
   }, []);
 
+  // Auto-archive at the end (once per open; only user-driven progress — scrolling, page turns, Listen).
+  const autoArchived = useRef(false);
+  const scrollEndMode = useRef(false);
+  const maybeAutoArchive = useCallback((p: number) => {
+    const it = itemRef.current;
+    if (autoArchived.current || deleted.current || prefsRef.current.autoArchive !== true) return;
+    if (it.location !== 'library' || it.status !== 'unread') return;
+    const atEnd = scrollEndMode.current
+      ? document.documentElement.scrollHeight - window.scrollY - window.innerHeight <= END_SLACK
+      : p >= 0.999;
+    if (!atEnd) return;
+    autoArchived.current = true;
+    updateItem(it.id, { status: 'archived' }).catch((e: unknown) => toast(`Could not archive: ${errorMessage(e)}`, { error: true }));
+    toast('Archived — you reached the end', {
+      duration: 6000,
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          updateItem(it.id, { status: 'unread' }).catch((e: unknown) => toast(`Could not undo: ${errorMessage(e)}`, { error: true }));
+        },
+      },
+    });
+  }, []);
+
   const onProgress = useCallback(
     (p: number) => {
+      userMoved.current = true;
       progressRef.current = p;
+      progressStore.set(p);
       pendingProgress.current = p;
       window.clearTimeout(saveTimer.current);
       saveTimer.current = window.setTimeout(flushProgress, SAVE_DELAY);
+      maybeAutoArchive(p);
     },
-    [flushProgress],
+    [flushProgress, maybeAutoArchive, progressStore],
   );
 
   useEffect(() => {
@@ -248,7 +363,7 @@ function ReaderInner({ item }: { item: Item }) {
 
   const itemHighlights = useMemo(() => (allHighlights ?? []).filter((h) => h.itemId === item.id).sort(byCreated), [allHighlights, item.id]);
   const anchorables = useMemo<Anchorable[]>(
-    () => itemHighlights.map((h) => ({ id: h.id, text: h.text, prefix: h.prefix, suffix: h.suffix, note: h.note })),
+    () => itemHighlights.map((h) => ({ id: h.id, text: h.text, prefix: h.prefix, suffix: h.suffix, note: h.note, color: h.color ?? 'yellow' })),
     [itemHighlights],
   );
   const orderedHighlights = useMemo(() => {
@@ -269,14 +384,18 @@ function ReaderInner({ item }: { item: Item }) {
   }, [itemHighlights, hlState]);
   const editingHighlight = editHid ? (itemHighlights.find((h) => h.id === editHid) ?? null) : null;
 
-  const saveHighlight = useCallback(
-    (q: Quote, note: string) => {
-      addHighlight({ itemId: itemRef.current.id, text: q.text, prefix: q.prefix, suffix: q.suffix, note }).catch((e: unknown) =>
-        toast(`Could not save the highlight: ${(e as Error)?.message ?? 'unknown error'}`, { error: true }),
-      );
-    },
-    [],
-  );
+  const hlColorRef = useRef(hlColor);
+  hlColorRef.current = hlColor;
+  const chooseColor = useCallback((c: HighlightColor) => {
+    setHlColor(c);
+    writeLastColor(c);
+  }, []);
+
+  const saveHighlight = useCallback((q: Quote, note: string, color: HighlightColor = hlColorRef.current) => {
+    addHighlight({ itemId: itemRef.current.id, text: q.text, prefix: q.prefix, suffix: q.suffix, note, color }).catch((e: unknown) =>
+      toast(`Could not save the highlight: ${(e as Error)?.message ?? 'unknown error'}`, { error: true }),
+    );
+  }, []);
 
   const highlightRange = useCallback(
     (range: Range, withNote: boolean) => {
@@ -301,6 +420,17 @@ function ReaderInner({ item }: { item: Item }) {
       if (el) articleRef.current?.goTo(el, align);
     }, 30);
   };
+
+  // `?hl=<id>`: open at that highlight once it is placed in the text.
+  const [params] = useSearchParams();
+  const hlTarget = params.get('hl');
+  const hlJumped = useRef(false);
+  useEffect(() => {
+    if (!hlTarget || hlJumped.current || !hlState.applied.includes(hlTarget)) return;
+    hlJumped.current = true;
+    jumpTo(() => articleRef.current?.root()?.querySelector(`mark[data-hid="${CSS.escape(hlTarget)}"]`), 'center');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hlState, hlTarget]);
 
   const openContents = () => {
     const root = articleRef.current?.root();
@@ -333,11 +463,7 @@ function ReaderInner({ item }: { item: Item }) {
     copyLink: () => {
       const url = itemRef.current.url;
       if (!url) return;
-      if (!navigator.clipboard?.writeText) {
-        toast('Copying is not available here', { error: true });
-        return;
-      }
-      navigator.clipboard.writeText(url).then(
+      copyText(url).then(
         () => toast('Link copied'),
         () => toast('Could not copy the link', { error: true }),
       );
@@ -356,9 +482,61 @@ function ReaderInner({ item }: { item: Item }) {
     },
     saveToLibrary: () => saveToLibrary(itemRef.current),
     toggleSeen: () => toggleSeen(itemRef.current),
+    listen: () => listenRef.current?.toggle(),
+    summarize: () => setAiTab('summary'),
+    ask: () => setAiTab('ask'),
+    share: () => setShareOpen(true),
+    downloadEpub: () => {
+      toast('Preparing the EPUB…', { duration: 120_000 });
+      exportEpub([itemRef.current.id])
+        .then(({ url, name }) => {
+          dismissToast();
+          if (isNative()) {
+            void openExternal(url);
+            return;
+          }
+          // The file is served as an attachment, so following the link downloads it and the page stays.
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = name;
+          a.rel = 'noopener';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          toast(`Downloading ${name}`);
+        })
+        .catch((e: unknown) => toast(`Could not create the EPUB: ${errorMessage(e)}`, { error: true }));
+    },
   };
   const actionsRef = useRef(actions);
   actionsRef.current = actions;
+
+  const copyMarkdown = () => {
+    const it = itemRef.current;
+    const md = documentMarkdown(
+      {
+        title: it.title,
+        url: it.url,
+        author: it.author,
+        siteName: it.siteName,
+        tags: it.tags,
+        savedAt: it.createdAt?.toDate?.() ?? null,
+        publishedAt: it.publishedAt?.toDate?.() ?? null,
+      },
+      orderedHighlights,
+    );
+    copyText(md).then(
+      () => toast('Highlights copied as Markdown'),
+      () => toast('Could not copy', { error: true }),
+    );
+  };
+
+  const next = useMemo(() => (allItems ? nextUnread(allItems, item) : null), [allItems, item]);
+  const goNext = () => {
+    if (!next) return;
+    flushProgress();
+    void navigate(`/item/${encodeURIComponent(next.id)}`, { replace: true });
+  };
 
   // ------------------------------------------------------------------ keyboard
 
@@ -399,6 +577,8 @@ function ReaderInner({ item }: { item: Item }) {
 
   const articleShown = !showOriginal && hasText;
   const paged = articleShown && prefs.readerMode === 'paginate';
+  scrollEndMode.current = articleShown && !paged;
+  const canListen = articleShown && ttsAvailable();
 
   useEffect(() => {
     const cls = 'reader-pages-active';
@@ -407,7 +587,7 @@ function ReaderInner({ item }: { item: Item }) {
   }, [paged]);
 
   const style = {
-    '--reader-font': `var(--font-${prefs.fontFamily})`,
+    '--reader-font': fontStack(prefs.fontFamily),
     '--reader-size': `${prefs.fontSize}px`,
     '--reader-lh': String(prefs.lineHeight),
     '--reader-width': `${prefs.width}ch`,
@@ -439,10 +619,19 @@ function ReaderInner({ item }: { item: Item }) {
   ) : null;
 
   const statusBanner =
-    item.fetchStatus === 'pending' || item.fetchStatus === 'processing' ? (
+    isStalled(item) ? (
+      <p className="reader-banner">
+        <span>Fetching a fresh copy is taking unusually long.</span>{' '}
+        <button type="button" className="btn btn-small" onClick={() => retryFetch(item)}>
+          Retry
+        </button>
+      </p>
+    ) : item.fetchStatus === 'pending' || item.fetchStatus === 'processing' ? (
       <p className="reader-banner">
         <Spinner inline label="Fetching a fresh copy…" />
       </p>
+    ) : item.fetchStatus === 'error' && item.retryAt ? (
+      <p className="reader-banner muted">A fresh copy is fetched automatically soon.</p>
     ) : item.fetchStatus === 'error' ? (
       <p className="reader-banner">
         <span className="error-text">{item.fetchError || 'Fetching failed.'}</span>{' '}
@@ -466,7 +655,13 @@ function ReaderInner({ item }: { item: Item }) {
             Save to library
           </button>
         ) : null}
+        {next ? (
+          <button type="button" className="btn article-next" onClick={goNext} title={next.title}>
+            Next unread →
+          </button>
+        ) : null}
       </div>
+      {next ? <p className="small muted truncate article-next-title">{next.title || 'Untitled'}</p> : null}
     </footer>
   );
 
@@ -527,7 +722,7 @@ function ReaderInner({ item }: { item: Item }) {
         onHighlightsApplied={setHlState}
       />
     );
-  } else if (item.fetchStatus === 'uploading' || item.fetchStatus === 'pending' || item.fetchStatus === 'processing') {
+  } else if ((item.fetchStatus === 'uploading' || item.fetchStatus === 'pending' || item.fetchStatus === 'processing') && !isStalled(item)) {
     body = (
       <div className="reader-page reader-state">
         {header()}
@@ -538,15 +733,19 @@ function ReaderInner({ item }: { item: Item }) {
         <div className="row">{originalLink}</div>
       </div>
     );
-  } else if (item.fetchStatus === 'error') {
+  } else if (item.fetchStatus === 'error' || isStalled(item)) {
     body = (
       <div className="reader-page reader-state">
         {header()}
-        <p className="error-text">{item.fetchError || 'Could not fetch this item.'}</p>
+        <p className={item.retryAt ? 'muted' : 'error-text'}>
+          {isStalled(item) ? 'Fetching this item is taking unusually long.' : item.fetchError || 'Could not fetch this item.'}
+        </p>
         <div className="row">
-          <button type="button" className="btn btn-primary" onClick={() => retryFetch(item)}>
-            Retry
-          </button>
+          {item.retryAt ? null : (
+            <button type="button" className="btn btn-primary" onClick={() => retryFetch(item)}>
+              Retry
+            </button>
+          )}
           {originalLink}
         </div>
       </div>
@@ -577,7 +776,12 @@ function ReaderInner({ item }: { item: Item }) {
         highlightCount={itemHighlights.length}
         hasContents={articleShown && chaptered}
         typographyOpen={typoOpen}
+        canListen={canListen}
+        listening={listening}
+        listenInMenu={narrow && prefs.theme === 'eink'}
+        ai={config.ai}
         actions={actions}
+        progress={articleShown && !paged ? progressStore : null}
       />
       {paged && !chromeVisible ? (
         <div className="running-head" aria-hidden="true">
@@ -586,7 +790,19 @@ function ReaderInner({ item }: { item: Item }) {
       ) : null}
       <main className="reader-main">{body}</main>
 
-      {articleShown ? <SelectionBar getRoot={() => articleRef.current?.root() ?? null} onHighlight={highlightRange} /> : null}
+      {articleShown ? (
+        <SelectionBar getRoot={() => articleRef.current?.root() ?? null} onHighlight={highlightRange} color={hlColor} onColor={chooseColor} />
+      ) : null}
+      {articleShown ? (
+        <ListenBar
+          ref={listenRef}
+          getRoot={() => articleRef.current?.root() ?? null}
+          contentKey={html}
+          paged={paged}
+          goTo={(el, align) => articleRef.current?.goTo(el, align)}
+          onOpenChange={setListening}
+        />
+      ) : null}
       <TypographyPanel open={typoOpen} onClose={() => setTypoOpen(false)} />
       <EditItemDialog item={item} open={editOpen} onClose={() => setEditOpen(false)} />
       <HighlightsPanel
@@ -602,6 +818,7 @@ function ReaderInner({ item }: { item: Item }) {
           setHlPanelOpen(false);
           setEditHid(hid);
         }}
+        onCopyMarkdown={copyMarkdown}
       />
       <ContentsPanel
         open={contentsOpen}
@@ -616,12 +833,16 @@ function ReaderInner({ item }: { item: Item }) {
       <HighlightDialog highlight={editingHighlight} onClose={() => setEditHid(null)} />
       <NewNoteDialog
         quote={pendingQuote?.text ?? null}
+        color={hlColor}
         onClose={() => setPendingQuote(null)}
-        onSave={(note) => {
-          if (pendingQuote) saveHighlight(pendingQuote, note);
+        onSave={(note, color) => {
+          if (color !== hlColor) chooseColor(color);
+          if (pendingQuote) saveHighlight(pendingQuote, note, color);
           setPendingQuote(null);
         }}
       />
+      {config.ai ? <AiPanel item={item} tab={aiTab} onTab={setAiTab} onClose={() => setAiTab(null)} /> : null}
+      <ShareDialog item={item} open={shareOpen} highlightCount={itemHighlights.length} onClose={() => setShareOpen(false)} />
     </div>
   );
 }

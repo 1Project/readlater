@@ -1,6 +1,46 @@
 /* Base styles & themes. Other modules add their own CSS files and reuse these
    variables and primitives (see docs/SPEC.md "CSS conventions"). */
 
+/* Bundled reader fonts (SPEC-2 §3): latin subset, regular + bold, woff2 only. Use them through
+   --font-literata / --font-atkinson (or fontStack() from lib/prefs). */
+@font-face {
+  font-family: 'Literata';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('@fontsource/literata/files/literata-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Literata';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('@fontsource/literata/files/literata-latin-700-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('@fontsource/atkinson-hyperlegible/files/atkinson-hyperlegible-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('@fontsource/atkinson-hyperlegible/files/atkinson-hyperlegible-latin-700-normal.woff2') format('woff2');
+}
+
+/* Highlight colours, derived from the theme (yellow is the classic --mark); used by the reader, Highlights and
+   Daily review. In the e-ink theme those show the colour as a border / underline style instead. */
+:root {
+  --hl-yellow: var(--mark);
+  --hl-green: color-mix(in srgb, var(--ok) 30%, var(--bg));
+  --hl-blue: color-mix(in srgb, var(--accent) 26%, var(--bg));
+  --hl-pink: color-mix(in srgb, var(--danger) 24%, var(--bg));
+}
+
 :root {
   --bg: #ffffff;
   --fg: #16161a;
@@ -21,6 +61,8 @@
   --font-serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Charter, 'Bitstream Charter', Georgia, serif;
   --font-sans: var(--font-ui);
   --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --font-literata: 'Literata', var(--font-serif);
+  --font-atkinson: 'Atkinson Hyperlegible', var(--font-ui);
   --page-width: 760px;
   --transition: 120ms ease;
   color-scheme: light;
@@ -41,6 +83,24 @@
   --danger: #ff7a6e;
   --ok: #7ad08f;
   color-scheme: dark;
+}
+
+/* Sepia: warm paper, dark brown ink (a light scheme). */
+:root[data-theme='sepia'] {
+  --bg: #f4ecd8;
+  --fg: #3b2f22;
+  --muted: #6e5c48;
+  --faint: #9c8a73;
+  --border: #dccfb2;
+  --surface: #ede2c8;
+  --hover: #e8dcc0;
+  --accent: #8a4b16;
+  --accent-fg: #fbf6ea;
+  --mark: #f0d77a;
+  --mark-fg: inherit;
+  --danger: #a3321f;
+  --ok: #3f6b2a;
+  color-scheme: light;
 }
 
 /* E-ink: pure black on white, no greys for text, no shadows, no motion, bigger targets. */
@@ -199,6 +259,11 @@ h3 {
   opacity: 0.5;
   cursor: default;
 }
+/* E-ink: no greys. A disabled button keeps full contrast and gets a dashed border instead. */
+:root[data-theme='eink'] .btn:disabled {
+  opacity: 1;
+  border-style: dashed;
+}
 .btn-primary {
   background: var(--accent);
   border-color: var(--accent);
@@ -291,7 +356,7 @@ h3 {
   z-index: 100;
 }
 :root[data-theme='eink'] .dialog-backdrop {
-  background: rgb(255 255 255 / 0.85);
+  background: var(--bg);
 }
 .dialog {
   width: min(520px, 100%);

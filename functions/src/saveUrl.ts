@@ -11,7 +11,13 @@ export interface SaveInput {
   tags?: string[];
   /** undefined = leave as is (existing) / null (new); a string must be an existing category id. */
   categoryId?: string | null;
+  /** How it was saved (docs/SPEC-2.md §2); set on new items only. */
+  source?: CallableSource;
 }
+
+/** `source` values a signed-in client may claim through the callable (default 'web'). */
+export const CALLABLE_SOURCES = ['web', 'app', 'import', 'bookmarklet'] as const;
+export type CallableSource = (typeof CALLABLE_SOURCES)[number];
 
 export interface SaveResult {
   id: string;
@@ -106,6 +112,7 @@ export async function saveForUser(uid: string, input: SaveInput): Promise<SaveRe
       tags,
       categoryId: categoryId ?? null,
       location: 'library',
+      source: input.source ?? 'web',
       fetchStatus: 'pending',
     }),
   );
@@ -115,12 +122,14 @@ export async function saveForUser(uid: string, input: SaveInput): Promise<SaveRe
 export const saveUrl = onCall({ region: REGION }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError('unauthenticated', 'Sign in first');
-  const data = (request.data ?? {}) as { url?: unknown; tags?: unknown; categoryId?: unknown; title?: unknown };
+  const data = (request.data ?? {}) as { url?: unknown; tags?: unknown; categoryId?: unknown; title?: unknown; source?: unknown };
+  const source = (CALLABLE_SOURCES as readonly unknown[]).includes(data.source) ? (data.source as CallableSource) : 'web';
   const res = await saveForUser(uid, {
     url: typeof data.url === 'string' ? data.url : '',
     title: typeof data.title === 'string' ? data.title : null,
     tags: normalizeTags(data.tags),
     categoryId: typeof data.categoryId === 'string' ? data.categoryId : data.categoryId === null ? null : undefined,
+    source,
   });
   return { id: res.id };
 });

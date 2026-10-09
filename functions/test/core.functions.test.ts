@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { CODE_ALPHABET, generateLoginCode, isWellFormedCode, normalizeLoginCode } from '../src/auth';
-import { cleanKeyName, generateApiKey, isApiKeyFormat } from '../src/apiKeys';
+import { challengeOf, CODE_ALPHABET, generateLoginCode, isWellFormedCode, normalizeLoginCode, parseChallenge, verifierMatches } from '../src/auth';
+import { cleanKeyName, generateApiKey, isApiKeyFormat, keyScope } from '../src/apiKeys';
 import { bodyFields, parseSaveRequest, routeOf, savedPage, wantsHtml } from '../src/api';
-import { decideAction, donePatch, errorMessage, fileKind, itemKeywords } from '../src/processLogic';
+import { Timestamp } from 'firebase-admin/firestore';
+import { decideAction, donePatch, errorMessage, fileKind, itemKeywords, MAX_PROCESS_ATTEMPTS, retryPatch, STALLED_MESSAGE, stalePatch } from '../src/processLogic';
 import type { Extracted } from '../src/extract/types';
 
 describe('login codes', () => {
@@ -22,9 +23,34 @@ describe('login codes', () => {
     expect(isWellFormedCode('ABCDEFG')).toBe(false);
     expect(isWellFormedCode('ABCDEFGI')).toBe(false); // I is not in the alphabet
   });
+  it('binds app sign-in codes to a verifier (PKCE S256)', () => {
+    // RFC 7636 appendix B test vector.
+    const verifier = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
+    const challenge = 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM';
+    expect(challengeOf(verifier)).toBe(challenge);
+    expect(parseChallenge(challenge)).toBe(challenge);
+    expect(parseChallenge(undefined)).toBeUndefined();
+    expect(parseChallenge('')).toBeUndefined();
+    expect(parseChallenge('short')).toBeNull();
+    expect(parseChallenge(42)).toBeNull();
+    // Codes made without a challenge (device linking) need no verifier.
+    expect(verifierMatches(undefined, undefined)).toBe(true);
+    // Codes made with one are useless to whoever intercepts the redirect.
+    expect(verifierMatches(challenge, verifier)).toBe(true);
+    expect(verifierMatches(challenge, undefined)).toBe(false);
+    expect(verifierMatches(challenge, 'x'.repeat(43))).toBe(false);
+    expect(verifierMatches(challenge, challenge)).toBe(false);
+  });
 });
 
 describe('api keys', () => {
+  it('scopes: save-only keys (and legacy bookmarklet keys) cannot read', () => {
+    expect(keyScope({ scope: 'save', name: 'x' })).toBe('save');
+    expect(keyScope({ scope: 'all', name: 'Bookmarklet' })).toBe('all');
+    expect(keyScope({ name: 'Bookmarklet' })).toBe('save');
+    expect(keyScope({ name: 'Browser extension' })).toBe('all');
+    expect(keyScope({ scope: 'weird' })).toBe('all');
+  });
   it('format rl_ + 40 base62', () => {
     const k = generateApiKey();
     expect(k).toMatch(/^rl_[A-Za-z0-9]{40}$/);
@@ -180,5 +206,31 @@ describe('processItem logic', () => {
     expect(fileKind({ name: 'x' }, Buffer.from('%PDF-1.7'))).toBe('pdf');
     expect(fileKind({ name: 'x' }, Buffer.from('PK\u0003\u0004'))).toBe('epub');
     expect(fileKind({ name: 'x' })).toBeNull();
+  });
+});
+
+describe('stuck and rate-limited items (sweepItems)', () => {
+  const now = Date.parse('2026-10-09T12:00:00Z');
+  const ago = (min: number) => Timestamp.fromMillis(now - min * 60_000);
+
+  it('re-queues a run that never finished, then gives up', () => {
+    const cur = { fetchStatus: 'processing', processingAt: ago(11), url: 'https://example.com/a' };
+    const p = stalePatch(cur, now)!;
+    expect(p.fetchStatus).toBe('pending');
+    expect(p.processAttempts).toBe(1);
+    const last = stalePatch({ ...cur, processAttempts: MAX_PROCESS_ATTEMPTS - 1 }, now)!;
+    expect(last).toMatchObject({ fetchStatus: 'error', fetchError: STALLED_MESSAGE });
+  });
+
+  it('leaves live runs and finished items alone; unfetchable items fail at once', () => {
+    expect(stalePatch({ fetchStatus: 'processing', processingAt: ago(3), url: 'https://e.x/' }, now)).toBeNull();
+    expect(stalePatch({ fetchStatus: 'done', processingAt: ago(30), url: 'https://e.x/' }, now)).toBeNull();
+    expect(stalePatch({ fetchStatus: 'processing', processingAt: ago(30), url: null, file: null }, now)).toMatchObject({ fetchStatus: 'error' });
+  });
+
+  it('queues a rate-limited item again once retryAt has passed', () => {
+    expect(retryPatch({ fetchStatus: 'error', retryAt: ago(1) }, now)).toMatchObject({ fetchStatus: 'pending', fetchError: null });
+    expect(retryPatch({ fetchStatus: 'error', retryAt: ago(-5) }, now)).toBeNull();
+    expect(retryPatch({ fetchStatus: 'pending', retryAt: ago(1) }, now)).toBeNull();
   });
 });

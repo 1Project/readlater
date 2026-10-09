@@ -10,6 +10,7 @@
  *   buttonClassName?: string      default 'btn btn-ghost btn-icon'
  *   align?: 'start' | 'end'       which edge of the trigger the menu lines up with; default 'end'
  *   title?: string                tooltip of the trigger (defaults to label)
+ *   describedBy?: string          id of an element describing the trigger (e.g. the list row's title)
  * type MenuEntry = MenuItem | 'separator'
  * type MenuItem = { label: ReactNode; onSelect: () => void; icon?: ReactNode; danger?: boolean; disabled?: boolean }
  */
@@ -33,9 +34,10 @@ export interface MenuProps {
   buttonClassName?: string;
   align?: 'start' | 'end';
   title?: string;
+  describedBy?: string;
 }
 
-export function Menu({ items, label, children, buttonClassName = 'btn btn-ghost btn-icon', align = 'end', title }: MenuProps) {
+export function Menu({ items, label, children, buttonClassName = 'btn btn-ghost btn-icon', align = 'end', title, describedBy }: MenuProps) {
   const [open, setOpen] = useState(false);
   const [up, setUp] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -117,6 +119,7 @@ export function Menu({ items, label, children, buttonClassName = 'btn btn-ghost 
         type="button"
         className={buttonClassName}
         aria-label={label}
+        aria-describedby={describedBy}
         title={title ?? label}
         aria-haspopup="menu"
         aria-expanded={open}

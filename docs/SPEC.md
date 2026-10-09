@@ -3,6 +3,12 @@
 This is the contract every part of the codebase follows. If you change a
 contract here, update this file.
 
+**Wave 2** (more ways to save, organisation, reading, AI, sharing and export,
+stats) is specified in [SPEC-2.md](SPEC-2.md), which extends this file and is
+equally binding. It only adds: new optional item and highlight fields, new
+collections, functions, routes and HTTP endpoints. The places below that it
+extends point to it.
+
 Product: a minimal read-it-later app (inspired by Readwise Reader) — save
 articles, X posts, papers, PDFs and EPUBs; subscribe to RSS feeds; read in a
 clean reader with highlights; organise with categories and tags; full-text
@@ -42,6 +48,9 @@ All user data lives under `users/{uid}`. Timestamps are Firestore `Timestamp`
 (serverTimestamp on write).
 
 ### `users/{uid}/items/{itemId}` — one saved thing
+
+Wave 2 adds the optional fields `source` (how it was saved; client-settable on create only),
+`rulesApplied`, `aiSummary` and `shareToken` (server-only) — see SPEC-2.md §2, §5, §6.
 
 | field | type | notes |
 |---|---|---|
@@ -93,7 +102,7 @@ For EPUBs: chapters concatenated, each chapter wrapped in `<section data-chapter
 
 ### `users/{uid}/highlights/{highlightId}`
 
-`{ itemId, text, note, prefix, suffix, createdAt, updatedAt }` — `text` is the
+`{ itemId, text, note, prefix, suffix, createdAt, updatedAt, color? }` (`color`: SPEC-2.md §3) — `text` is the
 highlighted plain text; `prefix`/`suffix` are up to 32 chars of surrounding text
 used to re-anchor the highlight on render (text-quote selector).
 
@@ -107,7 +116,11 @@ used to re-anchor the highlight on render (text-quote selector).
 Created by callable `addFeed` (client may update title/categoryId/tags/fullText, and delete).
 Feed items are written by the server as items with `location:'feed'`,
 `feedId`, id = `f_` + first 24 hex of sha1(feedId + '|' + (guid || link)).
-Only entries newer than the last 30 days (or the latest 20 on first fetch) are added.
+Only entries newer than the last 30 days (or the latest 20 on first fetch) are added. The first fetch also
+stores `since` (server-only: the oldest publication date it took, when it skipped older entries) and later
+refreshes ignore dated entries older than that; entries that were skipped without a date, or whose item the
+user deleted, are remembered in `users/{uid}/feedSeen/{itemId}` `{ feedId, expiresAt }` (server-only, TTL)
+and never added again.
 
 ### `users/{uid}/search/{itemId}` — server-written search index
 
@@ -118,19 +131,27 @@ tags, note, and content text; max 4000 terms. Queried server-side by the
 
 ### `users/{uid}/apiKeys/{keyId}` — mirror for listing
 
-`{ name, prefix (first 6 chars of key), createdAt, lastUsedAt }` — keyId is the
+`{ name, scope, prefix (first 6 chars of key), createdAt, lastUsedAt }` — keyId is the
 sha256 hex of the key. Server-written only (clients may read and delete via callable).
+
+### More collections (SPEC-2.md)
+
+`users/{uid}/views`, `users/{uid}/rules` (owner CRUD), `users/{uid}/integrations/{telegram|email}`
+(server-written), top-level `shares/{token}` (public get, no list) and the server-only
+`telegramLinks`, `telegramChats`, `telegramUpdates`, `inboundAddresses`, `emailDedupe`.
 
 ### Top-level (server-only, rules deny all client access)
 
-- `loginCodes/{sha256(code)}` — `{ uid, expiresAt, used: boolean, createdAt }`.
-- `apiKeys/{sha256(key)}` — `{ uid, name, createdAt }`.
+- `loginCodes/{sha256(code)}` — `{ uid, expiresAt, used: boolean, createdAt, challenge? }` (`challenge`: PKCE S256 of the native app's sign-in).
+- `apiKeys/{sha256(key)}` — `{ uid, name, scope: 'all'|'save', createdAt }` (keys without `scope` are `all`, except one named `Bookmarklet`).
 - `rateLimits/{bucket}` — `{ count, windowStart }`.
 
 ## Cloud Storage layout
 
 - `users/{uid}/uploads/{itemId}/{fileName}` — user uploads (pdf/epub, ≤ 100 MB), client-writable by owner.
 - `users/{uid}/files/{itemId}/...` — server-written derived files (downloaded PDFs, EPUB images). Owner can read.
+- `users/{uid}/uploads/{itemId}/page.html` — page HTML captured by the browser extension (`POST /api/save` `html`), server-written, owner read (SPEC-2.md §1).
+- `users/{uid}/exports/{id}.epub` — EPUB exports (`exportEpub`), server-written, owner read (SPEC-2.md §6).
 
 ## Cloud Functions (all `us-central1`, names exact)
 
@@ -138,32 +159,45 @@ Callables (firebase-functions v2 `onCall`), all except `redeemLoginCode` require
 
 | name | request | response |
 |---|---|---|
-| `createLoginCode` | `{}` | `{ code: string, expiresAt: number(ms) }` — 8 chars from `ABCDEFGHJKMNPQRSTUVWXYZ23456789`, valid 10 min, single use |
-| `redeemLoginCode` | `{ code: string }` | `{ token: string }` custom auth token; codes compared case-insensitively, spaces/dashes ignored; rate limited per IP |
-| `createApiKey` | `{ name: string }` | `{ id: string, key: string }` key = `rl_` + 40 random base62 chars, shown once |
+| `createLoginCode` | `{ challenge?: string }` | `{ code: string, expiresAt: number(ms) }` — 8 chars from `ABCDEFGHJKMNPQRSTUVWXYZ23456789`, valid 10 min, single use. With `challenge` (base64url SHA-256 of a verifier, 43 chars) the code is redeemable only with that verifier |
+| `redeemLoginCode` | `{ code: string, verifier?: string }` | `{ token: string }` custom auth token; codes compared case-insensitively, spaces/dashes ignored; a code made with a challenge needs the matching `verifier` (a wrong one burns the code); rate limited per IP (the last `X-Forwarded-For` hop, the one Google's front end adds) |
+| `createApiKey` | `{ name: string, scope?: 'all' \| 'save' }` | `{ id: string, key: string }` key = `rl_` + 40 random base62 chars, shown once. `save` keys may only call `/api/save` (the read endpoints answer 403) |
 | `revokeApiKey` | `{ id: string }` | `{ ok: true }` |
 | `search` | `{ q: string, limit?: number }` | `{ ids: string[] }` item ids whose index contains ALL terms (prefix match not required) |
 | `addFeed` | `{ url: string, categoryId?: string\|null, tags?: string[] }` | `{ id: string, title: string, added: number }` — discovers feed from HTML pages (`<link rel=alternate>`), validates, fetches entries |
 | `refreshFeeds` | `{ feedId?: string }` | `{ added: number }` |
 | `importOpml` | `{ opml: string }` | `{ feeds: number, failed: string[] }` |
-| `saveUrl` | `{ url: string, tags?: string[], categoryId?: string\|null, title?: string }` | `{ id: string }` server-side create (used by share flows when convenient) |
+| `saveUrl` | `{ url: string, tags?: string[], categoryId?: string\|null, title?: string, source?: 'web'\|'app'\|'import'\|'bookmarklet' }` | `{ id: string }` server-side create (used by share flows when convenient); `source` defaults to `'web'` |
+
+Wave-2 callables (`getConfig`, `createTelegramLink`, `unlinkTelegram`, `getInboundEmail`, `ai`,
+`createShare`, `revokeShare`, `exportEpub`) are specified in SPEC-2.md.
 
 Triggers / others:
 
 - `processItem` — `onDocumentWritten('users/{uid}/items/{itemId}')`. Runs when
   after.fetchStatus == 'pending' and (no before or before.fetchStatus != 'pending').
-  Sets `processing`, extracts (from `file` if present, else `url`), writes content
-  chunks, metadata, search index, sets `done`/`error`. Also re-indexes search
-  when title/tags/note change on a `done` item (cheap: metadata only + existing content text).
-  Timeout 300 s, memory 1 GiB.
+  Sets `processing` (with `processingAt` and its run id `processingRun`), extracts (from `file` if present,
+  else `url`), writes content chunks, metadata, search index, sets `done`/`error` — only while its run still
+  owns the item. Each user may have 300 items processed per hour; more are parked as `error` with `retryAt`
+  and queued again by `sweepItems`. Also re-indexes search when title/tags/note change on a `done` item
+  (cheap: metadata only + existing content text; the item is read again, so the latest edit wins).
+  Timeout 300 s, memory 2 GiB, concurrency 4, up to 20 instances.
+- `sweepItems` — `onSchedule('every 10 minutes')`: items still `processing` 10 minutes after `processingAt`
+  (the run died) are queued again (`pending`, at most 3 attempts, then `error`); rate-limited items whose
+  `retryAt` has passed are queued again. The client may queue an item (`fetchStatus: 'pending'`) only while no
+  run is live (not `processing`, or `processingAt` older than 10 minutes).
 - `cleanupItem` — `onDocumentDeleted('users/{uid}/items/{itemId}')`: delete content
-  subcollection, search doc, highlights for the item, storage under uploads/{itemId} and files/{itemId}.
+  subcollection, search doc, highlights for the item, storage under uploads/{itemId} and files/{itemId};
+  for a feed item, write its `feedSeen` tombstone.
 - `pollFeeds` — `onSchedule('every 60 minutes')`: refresh all feeds (collection group `feeds`), bounded concurrency.
 - `api` — `onRequest` HTTP, served at `/api/**` via Hosting rewrite:
   - `POST /api/save` JSON `{url, title?, tags?, category?}` or form/text body; `GET /api/save?url=..&key=..`
   - Auth: `Authorization: Bearer <apiKey>` or `?key=`.
   - Responds `{ ok: true, id }` (JSON) or, for GET with `Accept: text/html`, a tiny "Saved ✓" HTML page.
   - CORS: allow all origins (key-based auth, no cookies).
+  - Wave 2: more save fields and `GET /api/lookup|tags|categories|items` (SPEC-2.md §1).
+- `telegram`, `inboundEmail` — HTTP webhooks of the optional integrations; `cleanupShare` — deletes an
+  item's public share when the item is deleted (SPEC-2.md).
 
 Extraction rules (functions/src/extract):
 
@@ -179,6 +213,12 @@ Extraction rules (functions/src/extract):
 - YouTube/Vimeo: oEmbed metadata, type `video`, content = description if available + thumbnail.
 - Generic: fetch HTML (UA of a desktop browser, 15 s timeout, ≤ 10 MB, follow redirects), `@mozilla/readability` on `jsdom`, sanitize with DOMPurify, absolutize URLs, lazy-image fixups (`data-src`), metadata from OpenGraph/JSON-LD.
 - Outbound fetch honours `HTTPS_PROXY` (undici `EnvHttpProxyAgent`) when the env var is set.
+- SSRF guard (`http.ts fetchBuffer`, used by every fetch of a user-supplied URL): redirects are followed by hand
+  (≤ 10) and every hop is checked; private, loopback, link-local, CGNAT, multicast, reserved and IPv4-in-IPv6
+  addresses and internal names (no dot, `localhost`, `*.internal`, `*.local`) are refused; direct connections
+  resolve names through `safeLookup`, which refuses private addresses at connect time (no DNS rebinding).
+- A request that fails before any response (connect timeout, reset, refused, DNS hiccup) is tried once more when at
+  least 2 s of its timeout are left; HTTP error responses are not retried.
 
 ## Web app
 
@@ -190,24 +230,25 @@ DOMPurify, pdfjs-dist, qrcode. PWA via vite-plugin-pwa with share_target.
 
 | path | page |
 |---|---|
-| `/` | Library list. Query params: `view=unread\|archive\|favorites\|all` (default unread), `cat`, `tag`, `type`, `sort=new\|old\|short\|long` |
+| `/` | Library list. Query params: `view=unread\|archive\|favorites\|all` (default unread), `cat`, `tag`, `type`, `sort=new\|old\|short\|long\|opened` (`opened`: recently opened first) |
 | `/feed` | Feed list (view=new\|seen), header link to manage feeds |
 | `/feeds` | Manage feeds: add by URL, list, edit category/tags/fullText, delete, refresh, OPML import/export |
 | `/search?q=` | Search across everything (metadata instant client-side + full-text via `search` callable) |
 | `/highlights` | All highlights grouped by item, export Markdown |
-| `/item/:id` | Reader |
+| `/item/:id` | Reader; `?hl=<highlightId>` opens it at that highlight |
 | `/settings` | Appearance (theme, reader typography), categories, tags, link a device (code + QR), API keys + bookmarklet + iOS Shortcut instructions, import (URL list / Pocket-Instapaper CSV / OPML), export JSON, sign out |
 | `/login` | Google sign-in + "Enter code from another device" |
-| `/link?code=` | Auto-redeem code (target of QR) |
-| `/app-login?return=readlater://login` | used by the native app's "Sign in with Google": sign in, create code, redirect to `return` with `?code=` |
-| `/add?url=&title=&text=` | share target / bookmarklet landing: saves, then shows the item |
+| `/link?code=` | Target of the QR code: asks ("Sign in on this device with code …?"), then redeems |
+| `/app-login?return=readlater://login&challenge=` | used by the native app's "Sign in with Google": sign in, then a "Sign in to the app as …" button creates a code bound to `challenge` and redirects to `return` with `?code=`; without a valid challenge the link is refused |
+| `/add?url=&title=&text=` | share target / bookmarklet landing: shares from the app's own share handler are saved at once, anything else asks first ("Save to Readlater?"); then "Saved ✓" with Read now / Add tags / Done |
+| `/stats`, `/review`, `/s/:token` | wave 2 (SPEC-2.md §4, §6, §7); `/s/:token` is public |
 
-Unauthenticated users are redirected to `/login` (except `/login`, `/link`, `/app-login`).
+Unauthenticated users are redirected to `/login` (except `/login`, `/link`, `/app-login`, and the public `/s/:token`).
 
 ### Look & feel
 
 Minimal, typographic, monochrome with one accent. Themes: `system`, `light`,
-`dark`, `eink` (pure #000 on #fff, no greys under #555 for text, no shadows,
+`dark`, `sepia` (SPEC-2.md §3), `eink` (pure #000 on #fff, no greys under #555 for text, no shadows,
 no transitions/animations, borders instead of fills, bigger tap targets,
 paginated reader by default). Theme applied via `data-theme` on `<html>`;
 `prefers-reduced-motion` respected. Layout: a top bar (app name, nav: Library ·
@@ -217,7 +258,7 @@ max 760px. Must look good at 360px width. No modals that rely on hover.
 ### Reader
 
 - Typography prefs (per device, localStorage): font family (serif/sans/mono), size (14–28px), line height, width, justify.
-- Modes: scroll or paginated (CSS multi-column pages; tap left third = previous, right third = next, middle = toggle toolbar; keys ←/→/PageUp/PageDown/Space; `hwpage` window event from native volume keys `{detail:{dir:1|-1}}`).
+- Modes: scroll or paginated (CSS multi-column pages; tap left third = previous, right third = next, middle = toggle toolbar; keys ←/→/PageUp/PageDown/Space, Home/End; the "3 / 67" page indicator opens *Go to page* (number, Start, End); `hwpage` window event from native volume keys `{detail:{dir:1|-1}}`). Scroll mode shows the progress in the toolbar ("35% · 34 min left" on wide screens, a thin static line always).
 - Progress saved (debounced 2 s) to `progress`, restored on open.
 - Toolbar: back, archive/unarchive, favorite, tags & category editor, note, open original, font settings, more (refetch, delete, save-to-library for feed items).
 - Highlights: select text → "Highlight" button (+ optional note); stored per spec; re-applied with `<mark data-hid>` by text-quote matching; tap a mark to edit note/delete.
@@ -241,8 +282,13 @@ Reader: `e` archive, `s` favorite, `h` highlight selection, `Esc` back.
 - iOS: URL scheme `readlater`; sharing via the iOS Shortcut + API key documented in Settings.
 - `src/native.ts` exports `initNative(navigate: (path: string) => void): void` and
   `isNative(): boolean`, `openExternal(url)`, and `nativeGoogleSignIn(): Promise<void>`
-  (opens `${PUBLIC_URL}/app-login?return=readlater://login` in the system browser).
-  Shared text/URLs navigate to `/add?url=…`; shared files call `uploadFile()` from `lib/data.ts`.
+  (opens `${PUBLIC_URL}/app-login?return=readlater://login&challenge=…` in the system browser; it keeps the PKCE
+  verifier, and `readlater://login?code=` links are redeemed only while such a sign-in is pending — otherwise
+  ignored, so no page or app can switch the app's account).
+  Shared text/URLs navigate to `/add?url=…` (marked trusted for `takeTrustedShare(url)`, so /add saves without
+  asking; `finishShare(navigate)` returns to the sharing app on Android); shared files call `uploadFile()` from
+  `lib/data.ts` once their bytes are checked to be a PDF/EPUB. Android reads only `content://` URIs of other
+  apps (never `file://` or its own FileProvider), and app data is excluded from backups.
 
 ## Config
 
@@ -252,6 +298,11 @@ Firebase Hosting). `VITE_PUBLIC_URL` = public origin of the hosted app (used
 by native for the Google sign-in hand-off and by the bookmarklet/shortcut
 docs; defaults to `window.location.origin` on web). `VITE_USE_EMULATORS=1`
 connects to local emulators (ports from firebase.json).
+
+Hosting headers (`firebase.json`): every page except `/api/**` and Firebase's reserved `/__/**` gets a
+Content-Security-Policy (scripts only from the site and Google's sign-in scripts, no inline scripts, no
+plugins, `frame-ancestors 'none'`; images and media from anywhere) and `X-Frame-Options: DENY`. The theme
+bootstrap is therefore a file (`web/public/theme-init.js`), not an inline script.
 
 ## Shared modules already written (build on them, don't rewrite)
 
@@ -284,13 +335,14 @@ Feed items also get a search index doc (use `buildKeywords`). Feed `tags`/`categ
 
 ### Function index (`functions/src/index.ts`)
 
-Re-exports every deployed function: `processItem, cleanupItem, createLoginCode, redeemLoginCode, createApiKey, revokeApiKey, search, saveUrl, api` (core) and `addFeed, refreshFeeds, importOpml, pollFeeds` (from `./feeds`).
+Re-exports every deployed function: `processItem, cleanupItem, sweepItems, createLoginCode, redeemLoginCode, createApiKey, revokeApiKey, search, saveUrl, api` (core) and `addFeed, refreshFeeds, importOpml, pollFeeds` (from `./feeds`),
+plus wave 2: `getConfig, createTelegramLink, unlinkTelegram, getInboundEmail, telegram, inboundEmail, ai, createShare, revokeShare, cleanupShare, exportEpub`.
 
 ## CSS conventions (web)
 
 Variables: `--bg --fg --muted --faint --border --surface --hover --accent --accent-fg --mark --mark-fg --danger --ok --radius --tap --font-ui --font-serif --font-sans --font-mono --page-width --transition`.
 Primitives in `styles.css`: `.page .stack .row .spacer .muted .small .truncate .btn .btn-primary .btn-ghost .btn-danger .btn-icon .btn.active .input .select .textarea .chip .chip.active .card .section-title .dialog-backdrop .dialog .toast .empty .error-text`.
-Theme on `<html data-theme="system|light|dark|eink" data-scheme="light|dark">`. Feature CSS goes into its own file next to the feature
+Theme on `<html data-theme="system|light|dark|sepia|eink" data-scheme="light|dark">`. Feature CSS goes into its own file next to the feature
 (e.g. `src/reader/reader.css`, `src/pages/settings.css`) and is imported by that feature's TSX. Never use colour literals in feature CSS — use variables,
 so the e-ink theme stays pure black/white. Icons: inline SVG or plain text/Unicode, no icon fonts.
 

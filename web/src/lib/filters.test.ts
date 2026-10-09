@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canonicalViewParams,
+  describeViewParams,
   filterItems,
   inScope,
   itemTime,
@@ -14,6 +16,7 @@ import {
   scoreItem,
   searchItems,
   sortItems,
+  textSnippet,
 } from './filters';
 import type { Item } from './types';
 
@@ -67,6 +70,7 @@ describe('param parsers', () => {
     expect(parseTypeFilter('epub')).toBe('epub');
     expect(parseTypeFilter('other')).toBe('all');
     expect(parseSort('long')).toBe('long');
+    expect(parseSort('opened')).toBe('opened');
     expect(parseSort('')).toBe('new');
     expect(parseScope('feed')).toBe('feed');
     expect(parseScope('x')).toBe('all');
@@ -129,6 +133,14 @@ describe('sortItems', () => {
   it('sorts by length with unknown lengths last', () => {
     expect(sortItems(list, 'short')).toEqual([pending, mid, old, fresh]);
     expect(sortItems(list, 'long')).toEqual([old, mid, pending, fresh]);
+  });
+
+  it('sorts by recently opened (continue reading), never-opened items last', () => {
+    const a = mk({ created: 1000, lastOpenedAt: ts(50_000) });
+    const b = mk({ created: 2000, lastOpenedAt: ts(90_000) });
+    const c = mk({ created: 3000 });
+    const d = mk({ created: 4000 });
+    expect(sortItems([a, c, b, d], 'opened')).toEqual([b, a, d, c]);
   });
 
   it('does not mutate the input', () => {
@@ -214,5 +226,38 @@ describe('search', () => {
     expect(searchItems(items, '   ')).toEqual([]);
     expect(scoreItem(rust, parseSearchQuery('zebra'))).toBe(0);
     expect(scoreItem(rust, parseSearchQuery('rust'))).toBeGreaterThan(0);
+  });
+});
+
+describe('saved view params', () => {
+  it('canonicalises a Library query string', () => {
+    expect(canonicalViewParams('?tag=ai&view=unread&sort=new&type=all&x=1')).toBe('tag=ai');
+    expect(canonicalViewParams(new URLSearchParams('view=archive&cat=c1&sort=long&type=paper'))).toBe('cat=c1&sort=long&type=paper&view=archive');
+    expect(canonicalViewParams('view=bogus&sort=bogus&type=bogus&tag=')).toBe('');
+    expect(canonicalViewParams('tag=a b')).toBe('tag=a+b');
+  });
+
+  it('describes a view', () => {
+    const cats = [{ id: 'c1', name: 'Essays' }];
+    expect(describeViewParams('view=archive&cat=c1&tag=ai&type=paper&sort=long', cats)).toBe('Archive · Essays · #ai · Papers · Longest');
+    expect(describeViewParams('cat=gone')).toBe('Category');
+    expect(describeViewParams('')).toBe('Unread');
+  });
+});
+
+describe('textSnippet', () => {
+  const text = 'The quick brown fox jumps over the lazy dog. Electronic paper, also called e-ink, is a display that reflects light like ordinary paper. Café culture is nice.';
+  it('finds the first term, ignoring case and accents, with context cut at words', () => {
+    const s = textSnippet(text, ['reflects'], 30)!;
+    expect(s.match).toBe('reflects');
+    expect(s.before.startsWith('…')).toBe(true);
+    expect(s.after.endsWith('…')).toBe(true);
+    expect(`${s.before}${s.match}${s.after}`.replace(/…/g, '')).toContain('display that reflects light');
+    expect(textSnippet(text, ['cafe'])!.match).toBe('Café');
+    expect(textSnippet(text, ['electronic'], 500)).toEqual({ before: 'The quick brown fox jumps over the lazy dog. ', match: 'Electronic', after: text.slice(text.indexOf('Electronic') + 10) });
+  });
+  it('returns null without a match', () => {
+    expect(textSnippet(text, ['zebra'])).toBeNull();
+    expect(textSnippet('', ['x'])).toBeNull();
   });
 });

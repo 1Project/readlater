@@ -3,7 +3,10 @@ rules_version = '2';
 // Readlater Cloud Storage security rules. Layout: docs/SPEC.md.
 //
 // - users/{uid}/uploads/{itemId}/{fileName}: PDF / EPUB uploads written by the owner (<= 100 MB).
+//   uploads/{itemId}/page.html is the rendered page captured by the API / extension and is written
+//   only by Cloud Functions (owner read).
 // - users/{uid}/files/{itemId}/...: derived files written by Cloud Functions (Admin SDK); owner read.
+// - users/{uid}/exports/...: EPUB exports written by the exportEpub function; owner read.
 // - Everything else is denied.
 service firebase.storage {
   match /b/{bucket}/o {
@@ -25,11 +28,15 @@ service firebase.storage {
 
     match /users/{uid}/uploads/{itemId}/{fileName} {
       allow read: if isOwner(uid);
-      allow create, update: if isOwner(uid) && validUpload(fileName);
-      allow delete: if isOwner(uid);
+      allow create, update: if isOwner(uid) && fileName != 'page.html' && validUpload(fileName);
+      allow delete: if isOwner(uid) && fileName != 'page.html';
     }
 
     match /users/{uid}/files/{all=**} {
+      allow read: if isOwner(uid);
+    }
+
+    match /users/{uid}/exports/{all=**} {
       allow read: if isOwner(uid);
     }
   }

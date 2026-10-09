@@ -31,6 +31,11 @@ describe('sanitizeContent', () => {
     expect(imgs[0].getAttribute('alt')).toBe('A');
   });
 
+  it('keeps only the extractor note class', () => {
+    const out = sanitizeContent('<p class="rl-note"><em>Loaded from the Internet Archive</em></p><p class="ad rl-note">x</p><div class="rl-note">y</div>');
+    expect(out).toBe('<p class="rl-note"><em>Loaded from the Internet Archive</em></p><p>x</p><div>y</div>');
+  });
+
   it('keeps chapter and page markers', () => {
     const out = sanitizeContent('<section data-chapter="1" data-x="y"><h1>One</h1></section><h2 data-page="3">Page 3</h2>');
     expect(out).toContain('data-chapter="1"');

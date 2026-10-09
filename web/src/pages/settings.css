@@ -62,6 +62,16 @@
   font-weight: 600;
   margin: 8px 0 0;
 }
+/* Long how-to blocks start folded. */
+.set-details > summary.set-sub-title {
+  display: flex;
+  align-items: center;
+  min-height: var(--tap);
+  cursor: pointer;
+}
+.set-details[open] > summary.set-sub-title {
+  margin-bottom: 4px;
+}
 .set-field {
   display: flex;
   flex-direction: column;
@@ -262,6 +272,10 @@ a.set-list-name:hover {
 .input.set-filter {
   max-width: 320px;
 }
+.btn.set-show-all {
+  align-self: flex-start;
+  margin-top: 8px;
+}
 
 /* ---------- Link a device ---------- */
 
@@ -354,6 +368,61 @@ a.set-list-name:hover {
 .set-section code {
   font-family: var(--font-mono);
   font-size: 0.9em;
+}
+
+/* ---------- Font picker ---------- */
+
+@media (max-width: 480px) {
+  .set-seg-wrap {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* ---------- Auto rules ---------- */
+
+.card.set-rule-form {
+  flex: 1 1 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+:root[data-theme='eink'] .card.set-rule-form {
+  border-width: 2px;
+}
+.set-fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.set-fieldset legend {
+  padding: 0;
+  margin-bottom: 8px;
+}
+.set-rule-when,
+.set-rule-then {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.set-rule-when > *,
+.set-rule-then > * {
+  flex: 1 1 140px;
+  width: auto;
+  min-width: 0;
+}
+.set-rule-when > .set-rule-value {
+  flex: 2 1 200px;
+}
+.set-rule-then > * {
+  flex-basis: 190px;
+}
+.set-list-actions .btn.set-switch {
+  min-width: 76px;
 }
 
 /* ---------- Import / export / account ---------- */
@@ -589,6 +658,40 @@ a.set-list-name:hover {
 :root[data-theme='eink'] .hls-quote {
   border-left: 4px solid var(--fg);
 }
+.hls-quote-link {
+  color: inherit;
+  text-decoration: none;
+}
+.hls-quote-link:hover,
+.hls-quote-link:focus-visible {
+  text-decoration: underline;
+}
+/* Highlight colours (same mapping as the reader's highlights panel). */
+.hls-quote[data-color='yellow'] {
+  border-left-color: var(--hl-yellow);
+}
+.hls-quote[data-color='green'] {
+  border-left-color: var(--hl-green);
+}
+.hls-quote[data-color='blue'] {
+  border-left-color: var(--hl-blue);
+}
+.hls-quote[data-color='pink'] {
+  border-left-color: var(--hl-pink);
+}
+:root[data-theme='eink'] .hls-quote[data-color] {
+  border-left-color: var(--fg);
+}
+:root[data-theme='eink'] .hls-quote[data-color='green'] {
+  border-left: 5px double var(--fg);
+}
+:root[data-theme='eink'] .hls-quote[data-color='blue'] {
+  border-left-style: dotted;
+}
+:root[data-theme='eink'] .hls-quote[data-color='pink'] {
+  border-left-style: dashed;
+}
+
 .hls-note {
   margin: 0 0 0 17px;
   padding: 6px 10px;

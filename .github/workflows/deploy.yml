@@ -5,8 +5,10 @@ name: Deploy
 # then builds the Android APK against that project and attaches it to a GitHub Release.
 #
 # Optional: variable FIREBASE_PROJECT_ID (defaults to the key's project), variable VITE_PUBLIC_URL
-# (defaults to https://<project>.web.app), secrets ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD /
-# ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD for a release-signed APK (otherwise the debug-signed APK is attached).
+# (defaults to https://<project>.web.app), variable FUNCTIONS_ENV (the non-secret lines of
+# functions/.env.<project> that switch on the optional integrations; scripts/setup.sh can set it), secrets
+# ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD for a
+# release-signed APK (otherwise the debug-signed APK is attached).
 
 on:
   push:
@@ -96,6 +98,18 @@ jobs:
           echo "VITE_FIREBASE_CONFIG=$CONFIG" >> "$GITHUB_ENV"
           echo "VITE_PUBLIC_URL=$PUBLIC_URL" >> "$GITHUB_ENV"
 
+      - name: Functions settings
+        env:
+          PROJECT: ${{ steps.project.outputs.project }}
+          FUNCTIONS_ENV: ${{ vars.FUNCTIONS_ENV }}
+          VAR_PUBLIC_URL: ${{ vars.VITE_PUBLIC_URL }}
+        run: |
+          # functions/.env.<project> is git-ignored; without it the optional integrations deploy switched off.
+          FILE="functions/.env.$PROJECT"
+          if [ -n "$FUNCTIONS_ENV" ]; then printf '%s\n' "$FUNCTIONS_ENV" > "$FILE"; fi
+          if [ -n "$VAR_PUBLIC_URL" ] && ! grep -qs '^PUBLIC_URL=' "$FILE"; then echo "PUBLIC_URL=$VAR_PUBLIC_URL" >> "$FILE"; fi
+          if [ -f "$FILE" ]; then echo "Settings: $(cut -d= -f1 "$FILE" | grep -v '^#' | tr '\n' ' ')"; else echo "No FUNCTIONS_ENV: optional integrations stay off."; fi
+
       - name: Build and deploy
         run: scripts/deploy.sh --project "${{ steps.project.outputs.project }}" --skip-install
 
@@ -142,20 +156,20 @@ jobs:
             } >> "$GITHUB_ENV"
             echo "Signing with the release keystore."
           else
-            echo "No ANDROID_KEYSTORE_BASE64 secret: attaching the debug-signed APK."
+            # A debug build is debuggable and signed with the key committed to this repository: anyone could sign
+            # an "update" that replaces it. Never publish one; CI still uploads it as a workflow artifact for testing.
+            echo "::notice title=Android release skipped::Set the ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD and ANDROID_KEY_ALIAS secrets to publish a release-signed APK (docs/NATIVE.md)."
           fi
 
       - name: Build APK
+        if: env.READLATER_KEYSTORE != ''
         run: |
           echo "sdk.dir=$ANDROID_HOME" > web/android/local.properties
-          scripts/build-android.sh
-          if [ -f web/android/app/build/outputs/apk/release/app-release.apk ]; then
-            cp web/android/app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/readlater-$READLATER_VERSION_NAME.apk"
-          else
-            cp web/android/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/readlater-$READLATER_VERSION_NAME.apk"
-          fi
+          scripts/build-android.sh --release-only
+          cp web/android/app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/readlater-$READLATER_VERSION_NAME.apk"
 
       - uses: softprops/action-gh-release@v2
+        if: env.READLATER_KEYSTORE != ''
         with:
           tag_name: build-${{ github.run_number }}
           name: Readlater ${{ env.READLATER_VERSION_NAME }}

@@ -4,6 +4,7 @@
   "scripts": {
     "build": "npm --prefix functions run build && npm --prefix web run build",
     "test": "npm --prefix functions test && npm --prefix web test",
+    "test:emulators": "firebase emulators:exec --only firestore,storage --project demo-readlater \"npm --prefix functions test -- firestore storage\"",
     "emulators": "firebase emulators:start --project demo-readlater",
     "e2e": "npm --prefix e2e test"
   },

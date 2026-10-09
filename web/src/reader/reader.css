@@ -2,6 +2,8 @@
    stays pure black on white. Typography comes from variables set on .reader by Reader.tsx:
    --reader-font --reader-size --reader-lh --reader-width --reader-align. */
 
+/* Highlight colours: --hl-yellow / --hl-green / --hl-blue / --hl-pink (styles.css). */
+
 .reader {
   --reader-gutter: 16px;
   --toolbar-h: calc(var(--tap) + 9px);
@@ -47,10 +49,50 @@
 .reader-toolbar > .spacer {
   flex: 0 1 0;
 }
+.reader-progress {
+  flex: none;
+  padding: 0 6px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+:root[data-theme='eink'] .reader-progress {
+  color: var(--fg);
+}
+/* A static line (no transition), so it suits e-ink too. */
+.reader-progress-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--accent);
+  transform-origin: left center;
+  pointer-events: none;
+}
+:root[data-theme='eink'] .reader-progress-line {
+  background: var(--fg);
+  height: 3px;
+}
+/* The favorite toggle looks like the list's: a filled star, not an inverted button. */
+.reader-toolbar .btn.reader-fav[aria-pressed='true'] {
+  background: transparent;
+  border-color: transparent;
+  color: var(--accent);
+}
+.reader-toolbar .btn.reader-fav[aria-pressed='true']:hover {
+  background: var(--hover);
+}
+:root[data-theme='eink'] .reader-toolbar .btn.reader-fav[aria-pressed='true'] {
+  color: var(--fg);
+}
 @media (max-width: 559px) {
   .reader-toolbar-title {
     visibility: hidden;
     padding: 0;
+  }
+  .reader-progress {
+    display: none;
   }
 }
 .reader-hl-button {
@@ -312,6 +354,18 @@
   color: var(--muted);
   text-align: center;
 }
+/* Extractor note above the text, e.g. "Loaded from the Internet Archive snapshot of …". */
+.reader-content p.rl-note {
+  font-family: var(--font-ui);
+  font-size: 0.82em;
+  color: var(--muted);
+  padding-bottom: 0.75em;
+  border-bottom: 1px solid var(--border);
+}
+:root[data-theme='eink'] .reader-content p.rl-note {
+  color: var(--fg);
+  border-bottom-color: var(--fg);
+}
 .reader-content blockquote {
   margin-left: 0;
   margin-right: 0;
@@ -387,6 +441,108 @@
   vertical-align: super;
   margin-left: 1px;
   font-weight: 400;
+}
+
+/* Colours. In e-ink they become underline styles: yellow solid, green double, blue dotted, pink wavy. */
+.reader-content mark.hl[data-color='green'],
+.hl-sample[data-color='green'] {
+  background: var(--hl-green);
+}
+.reader-content mark.hl[data-color='blue'],
+.hl-sample[data-color='blue'] {
+  background: var(--hl-blue);
+}
+.reader-content mark.hl[data-color='pink'],
+.hl-sample[data-color='pink'] {
+  background: var(--hl-pink);
+}
+.hl-sample {
+  display: inline-block;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: var(--hl-yellow);
+  color: var(--mark-fg);
+  font-family: var(--font-serif);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+:root[data-theme='eink'] .reader-content mark.hl,
+:root[data-theme='eink'] .hl-sample {
+  background: transparent;
+  color: var(--fg);
+  text-decoration-line: underline;
+  text-decoration-style: solid;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+:root[data-theme='eink'] .reader-content mark.hl[data-color='green'],
+:root[data-theme='eink'] .hl-sample[data-color='green'] {
+  text-decoration-style: double;
+  text-decoration-thickness: 1.5px;
+}
+:root[data-theme='eink'] .reader-content mark.hl[data-color='blue'],
+:root[data-theme='eink'] .hl-sample[data-color='blue'] {
+  text-decoration-style: dotted;
+  text-decoration-thickness: 3px;
+}
+:root[data-theme='eink'] .reader-content mark.hl[data-color='pink'],
+:root[data-theme='eink'] .hl-sample[data-color='pink'] {
+  text-decoration-style: wavy;
+  text-decoration-thickness: 1.5px;
+}
+:root[data-theme='eink'] .hl-sample {
+  font-weight: 600;
+}
+
+/* Colour picker (selection bar, highlight dialogs). */
+.hl-colors {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+.hl-color {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--tap);
+  min-height: var(--tap);
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--fg);
+  cursor: pointer;
+}
+.hl-color[aria-pressed='true'] {
+  border-color: var(--fg);
+}
+.hl-color:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Text-to-speech: the block being read. No layout change (pages must not re-flow while listening). */
+.reader-content .tts-current {
+  position: relative;
+  background: color-mix(in srgb, var(--accent) 9%, var(--bg));
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 9%, var(--bg));
+  border-radius: 1px;
+}
+:root[data-theme='eink'] .reader-content .tts-current {
+  background: transparent;
+}
+:root[data-theme='eink'] .reader-content .tts-current::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -12px;
+  width: 5px;
+  background: var(--fg);
+}
+/* Let the marker in the gutter show in pages mode too (the page clip would cut it off). */
+html.tts-open .article-pages .article-clip {
+  overflow-clip-margin: 14px;
 }
 
 /* ---------- Pages mode ---------- */
@@ -468,7 +624,7 @@ html.reader-pages-active body {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: max(8px, env(safe-area-inset-bottom));
+  bottom: max(2px, env(safe-area-inset-bottom));
   text-align: center;
   font-family: var(--font-ui);
   font-size: 0.85rem;
@@ -478,6 +634,25 @@ html.reader-pages-active body {
 }
 :root[data-theme='eink'] .page-indicator {
   color: var(--fg);
+}
+/* Only the number itself takes taps (opens "Go to page"); the rest of the strip still turns pages. */
+.page-indicator-button {
+  pointer-events: auto;
+  min-height: 32px;
+  min-width: 64px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.page-indicator-button:focus-visible {
+  outline: 2px solid var(--accent);
+}
+:root[data-theme='eink'] .page-indicator-button {
+  min-height: 40px;
 }
 
 /* ---------- Selection bar ---------- */
@@ -499,12 +674,24 @@ html.reader-pages-active body {
 }
 .selection-bar-float {
   max-width: calc(100vw - 16px);
+  flex-wrap: wrap;
+  align-items: center;
 }
 .selection-bar-bottom {
   left: 8px;
   right: 8px;
   bottom: calc(44px + env(safe-area-inset-bottom));
   justify-content: center;
+  flex-wrap: wrap;
+}
+.selection-bar-bottom .hl-colors {
+  flex: 1 1 100%;
+  justify-content: center;
+}
+@media (min-width: 600px) {
+  .selection-bar-bottom .hl-colors {
+    flex: 0 0 auto;
+  }
 }
 .selection-bar-bottom .btn {
   flex: 1 1 0;
@@ -573,6 +760,25 @@ html.reader-pages-active body {
 .typo-row .segmented .btn {
   padding: 0 10px;
 }
+/* Five fonts / themes: a grid of separate buttons, three per row. */
+.typo-row.typo-row-wrap {
+  flex-direction: column;
+  align-items: stretch;
+}
+.typo-row .segmented.segmented-wrap {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+}
+.typo-row .segmented.segmented-wrap > .btn {
+  margin-left: 0;
+  border-radius: var(--radius);
+  padding: 0 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* ---------- Dialog contents ---------- */
 
@@ -618,6 +824,35 @@ html.reader-pages-active body {
 }
 :root[data-theme='eink'] .reader-hl-text {
   border-left-color: var(--fg);
+}
+.reader-hl-text[data-color='green'],
+.reader-quote[data-color='green'] {
+  border-left-color: var(--hl-green);
+}
+.reader-hl-text[data-color='blue'],
+.reader-quote[data-color='blue'] {
+  border-left-color: var(--hl-blue);
+}
+.reader-hl-text[data-color='pink'],
+.reader-quote[data-color='pink'] {
+  border-left-color: var(--hl-pink);
+}
+/* E-ink: the colour as a border style, matching the underline styles of the marks. */
+:root[data-theme='eink'] .reader-hl-text[data-color],
+:root[data-theme='eink'] .reader-quote[data-color] {
+  border-left-color: var(--fg);
+}
+:root[data-theme='eink'] .reader-hl-text[data-color='green'],
+:root[data-theme='eink'] .reader-quote[data-color='green'] {
+  border-left: 5px double var(--fg);
+}
+:root[data-theme='eink'] .reader-hl-text[data-color='blue'],
+:root[data-theme='eink'] .reader-quote[data-color='blue'] {
+  border-left-style: dotted;
+}
+:root[data-theme='eink'] .reader-hl-text[data-color='pink'],
+:root[data-theme='eink'] .reader-quote[data-color='pink'] {
+  border-left-style: dashed;
 }
 .reader-hl-note {
   font-size: 0.9rem;
@@ -739,4 +974,226 @@ html.reader-pages-active body {
   display: flex;
   justify-content: center;
   margin-top: 12px;
+}
+
+/* ---------- End of document ---------- */
+
+.article-footer-actions .article-next {
+  margin-left: auto;
+}
+.article-next-title {
+  margin: 8px 0 0;
+  text-align: right;
+}
+
+/* ---------- Listen (text-to-speech) bar ---------- */
+
+.tts-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+  padding: 6px max(8px, env(safe-area-inset-right), calc((100% - var(--page-width)) / 2)) max(6px, env(safe-area-inset-bottom))
+    max(8px, env(safe-area-inset-left), calc((100% - var(--page-width)) / 2));
+  background: var(--bg);
+  color: var(--fg);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -6px 20px color-mix(in srgb, var(--fg) 10%, transparent);
+  font-family: var(--font-ui);
+}
+:root[data-theme='eink'] .tts-bar {
+  border-top: 2px solid var(--fg);
+}
+.tts-controls,
+.tts-settings {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.tts-settings {
+  flex: 1 1 auto;
+  justify-content: flex-end;
+}
+.btn.tts-play {
+  border-radius: 50%;
+}
+.tts-pos {
+  min-width: 4.5em;
+  padding: 0 4px;
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+:root[data-theme='eink'] .tts-pos {
+  color: var(--fg);
+}
+.select.tts-rate {
+  width: auto;
+  flex: none;
+}
+.select.tts-voice {
+  width: auto;
+  min-width: 0;
+  flex: 0 1 240px;
+}
+@media (max-width: 479px) {
+  .tts-settings {
+    flex-basis: 100%;
+  }
+  .select.tts-voice {
+    flex: 1 1 auto;
+  }
+}
+
+/* Make room for the bar while it is open. */
+html.tts-open .article-scroll .article-clip {
+  padding-bottom: calc(96px + var(--tts-bar-h, 64px));
+}
+html.tts-open .article-pages {
+  padding-bottom: calc(40px + var(--tts-bar-h, 64px));
+}
+html.tts-open .page-indicator {
+  bottom: calc(var(--tts-bar-h, 64px) + 8px);
+}
+html.tts-open .selection-bar-bottom {
+  bottom: calc(var(--tts-bar-h, 64px) + 8px);
+}
+html.tts-open .toast {
+  bottom: calc(var(--tts-bar-h, 64px) + 12px);
+}
+
+/* ---------- Side / bottom sheet (AI panel) ---------- */
+
+.dialog-backdrop:has(> .reader-sheet) {
+  padding: 0;
+  align-items: stretch;
+  justify-content: flex-end;
+}
+.dialog-backdrop > .dialog.reader-sheet {
+  width: min(440px, 100%);
+  height: 100%;
+  max-height: none;
+  border-width: 0 0 0 1px;
+  border-radius: 0;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+@media (max-width: 599px) {
+  .dialog-backdrop:has(> .reader-sheet) {
+    align-items: flex-end;
+  }
+  .dialog-backdrop > .dialog.reader-sheet {
+    width: 100%;
+    height: auto;
+    max-height: 85vh;
+    max-height: 85dvh;
+    border-width: 1px 0 0;
+    border-radius: calc(var(--radius) + 4px) calc(var(--radius) + 4px) 0 0;
+  }
+}
+:root[data-theme='eink'] .dialog-backdrop > .dialog.reader-sheet {
+  border-width: 0 0 0 2px;
+}
+@media (max-width: 599px) {
+  :root[data-theme='eink'] .dialog-backdrop > .dialog.reader-sheet {
+    border-width: 2px 0 0;
+  }
+}
+
+.ai-tabs {
+  margin-bottom: 14px;
+}
+.ai-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ai-text {
+  font-family: var(--font-serif);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.ai-text p,
+.ai-text ul {
+  margin: 0 0 0.75em;
+}
+.ai-text ul {
+  padding-left: 1.2em;
+}
+.ai-text li + li {
+  margin-top: 0.4em;
+}
+.ai-tldr {
+  padding: 8px 10px;
+  border-left: 3px solid var(--fg);
+  background: var(--surface);
+}
+.ai-actions {
+  gap: 8px;
+}
+.ai-disclaimer {
+  margin: 0;
+}
+.ai-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.ai-history > li {
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+.ai-history > li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.ai-q {
+  margin: 0 0 6px;
+  font-weight: 600;
+  white-space: pre-wrap;
+}
+.ai-a p:last-child {
+  margin-bottom: 0;
+}
+.ai-ask {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ---------- Share dialog ---------- */
+
+.reader-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+.reader-check input {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 2px 0 0;
+  accent-color: var(--fg);
+}
+:root[data-theme='eink'] .reader-check input {
+  width: 24px;
+  height: 24px;
+}
+.share-dialog > p {
+  margin: 0;
+}
+.input.share-link {
+  font-size: 0.9rem;
+}
+.share-actions {
+  flex-wrap: wrap;
+  gap: 8px;
 }

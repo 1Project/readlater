@@ -78,7 +78,10 @@ export interface FxTweet {
   author: { name: string; screen_name: string; avatar_url?: string | null; url?: string };
   created_at?: string;
   created_timestamp?: number;
-  replying_to?: string | { screen_name?: string } | null;
+  /** v1: the handle; v2 (thread endpoint): `{ screen_name, status, … }`. */
+  replying_to?: string | { screen_name?: string; status?: string } | null;
+  /** v1 only: id of the post this replies to. */
+  replying_to_status?: string | null;
   media?: { photos?: FxPhoto[]; videos?: FxVideo[]; all?: (FxPhoto | FxVideo)[]; external?: { url: string; thumbnail_url?: string } };
   quote?: FxTweet | { type: 'tombstone'; message?: string };
   poll?: { choices: { label: string; count: number; percentage: number }[]; total_votes: number; ends_at?: string; time_left_en?: string };
@@ -334,11 +337,12 @@ function replyingTo(t: FxTweet): string | null {
   return typeof r === 'string' ? r : r.screen_name ?? null;
 }
 
-function tweetBodyHtml(t: FxTweet, depth: number): string {
+/** `continued`: a later post of a self-thread (no author line or "Replying to"). */
+function tweetBodyHtml(t: FxTweet, depth: number, continued = false): string {
   const tweetUrl = `https://x.com/${t.author.screen_name}/status/${t.id}`;
   const date = toDate(t.created_timestamp ? t.created_timestamp * 1000 : t.created_at ?? null);
-  const parts: string[] = [authorLine(t, tweetUrl, date)];
-  const reply = replyingTo(t);
+  const parts: string[] = continued ? [] : [authorLine(t, tweetUrl, date)];
+  const reply = continued ? null : replyingTo(t);
   if (reply) parts.push(`<p><small>Replying to <a href="${escapeHtml(profileUrl(reply))}">@${escapeHtml(reply)}</a></small></p>`);
   const textHtml = newlinesToParagraphs(tweetTextHtml(t));
   if (t.article) {
@@ -360,25 +364,83 @@ function tweetBodyHtml(t: FxTweet, depth: number): string {
   return parts.join('');
 }
 
-/** FxTwitter JSON → Extracted. Pure. */
-export function buildTweet(t: FxTweet): Extracted {
+// --- Self-threads (FxTwitter v2 `/2/thread/{id}`: `{ status, thread: [ancestors…, focal, descendants…] }`) ---
+
+/** Longest thread rendered (posts). */
+export const MAX_THREAD_POSTS = 200;
+
+function parentId(t: FxTweet): string | null {
+  if (t.replying_to_status) return t.replying_to_status;
+  const r = t.replying_to;
+  return r && typeof r === 'object' && r.status ? r.status : null;
+}
+
+function byCreation(a: FxTweet, b: FxTweet): number {
+  const d = (a.created_timestamp ?? 0) - (b.created_timestamp ?? 0);
+  if (d) return d;
+  return a.id.length - b.id.length || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+}
+
+/**
+ * The self-thread containing `focal`: its same-author reply chain upwards, then each next same-author
+ * reply in order (the earliest when the author branched). `posts` may contain anything (other people's
+ * replies, unrelated posts); only the chain is returned, `focal` included. Pure.
+ */
+export function selfThread(focal: FxTweet, posts: FxTweet[]): FxTweet[] {
+  const author = focal.author.screen_name.toLowerCase();
+  const same = (t: FxTweet) => t.author?.screen_name?.toLowerCase() === author;
+  const byId = new Map<string, FxTweet>();
+  for (const t of posts) if (t?.id && t.author && same(t)) byId.set(t.id, t);
+  byId.set(focal.id, focal);
+  const children = new Map<string, FxTweet[]>();
+  for (const t of byId.values()) {
+    const p = parentId(t);
+    if (p && byId.has(p)) children.set(p, [...(children.get(p) ?? []), t]);
+  }
+  const seen = new Set<string>([focal.id]);
+  const before: FxTweet[] = [];
+  for (let p = parentId(focal); p && byId.has(p) && !seen.has(p) && before.length < MAX_THREAD_POSTS; p = parentId(byId.get(p)!)) {
+    seen.add(p);
+    before.unshift(byId.get(p)!);
+  }
+  const after: FxTweet[] = [];
+  for (let cur = focal; before.length + after.length + 1 < MAX_THREAD_POSTS; ) {
+    const next = (children.get(cur.id) ?? []).filter((c) => !seen.has(c.id)).sort(byCreation)[0];
+    if (!next) break;
+    seen.add(next.id);
+    after.push(next);
+    cur = next;
+  }
+  return [...before, focal, ...after];
+}
+
+/** FxTwitter JSON → Extracted; `thread` (from selfThread, focal included) renders a whole self-thread. Pure. */
+export function buildTweet(t: FxTweet, thread: FxTweet[] = []): Extracted {
+  const posts = thread.length > 1 ? thread : [t];
+  const first = posts[0];
   const handle = t.author.screen_name;
-  const html = sanitizeHtml(tweetBodyHtml(t, 0));
-  const textOnly = plainText(t).replace(/\s+/g, ' ').trim();
-  const firstLine = t.article?.title ? collapseWs(t.article.title) : textOnly;
-  const kind = t.media?.videos?.length ? 'Video' : t.media?.photos?.length ? 'Photo' : 'Post';
-  const firstPhoto = (t.media?.photos ?? [])[0]?.url ?? null;
-  const firstVideo = (t.media?.videos ?? []).find((v) => v.thumbnail_url)?.thumbnail_url ?? null;
-  const quotePhoto = isTweet(t.quote) ? (t.quote.media?.photos ?? [])[0]?.url ?? null : null;
+  const parts = posts.map((p, i) => tweetBodyHtml(p, 0, i > 0));
+  if (posts.length > 1) parts.splice(1, 0, `<p><small>Thread · ${posts.length} posts</small></p>`);
+  const html = sanitizeHtml(parts.join(''));
+  const textOnly = plainText(first).replace(/\s+/g, ' ').trim();
+  const firstLine = first.article?.title ? collapseWs(first.article.title) : textOnly;
+  const kind = first.media?.videos?.length ? 'Video' : first.media?.photos?.length ? 'Photo' : 'Post';
+  const photos = posts.flatMap((p) => p.media?.photos ?? []);
+  const firstVideo = posts.flatMap((p) => p.media?.videos ?? []).find((v) => v.thumbnail_url)?.thumbnail_url ?? null;
+  const quotePhoto = isTweet(first.quote) ? (first.quote.media?.photos ?? [])[0]?.url ?? null : null;
+  const excerpt =
+    posts.length > 1
+      ? posts.map((p) => plainText(p).replace(/\s+/g, ' ').trim()).filter(Boolean).join(' ')
+      : first.article?.preview_text || textOnly;
   return finalize({
     type: 'tweet',
     html,
     title: `@${handle}: ${firstLine ? truncate(firstLine, 80) : kind}`,
     author: `${collapseWs(t.author.name) || handle} (@${handle})`,
     siteName: 'X',
-    excerpt: t.article?.preview_text || textOnly || null,
-    imageUrl: t.article?.cover_media?.media_info?.original_img_url ?? firstPhoto ?? firstVideo ?? quotePhoto ?? t.author.avatar_url ?? null,
-    publishedAt: t.created_timestamp ? t.created_timestamp * 1000 : t.created_at ?? null,
+    excerpt: excerpt || null,
+    imageUrl: first.article?.cover_media?.media_info?.original_img_url ?? photos[0]?.url ?? firstVideo ?? quotePhoto ?? t.author.avatar_url ?? null,
+    publishedAt: first.created_timestamp ? first.created_timestamp * 1000 : first.created_at ?? null,
     canonicalUrl: `https://x.com/${handle}/status/${t.id}`,
   });
 }
@@ -425,17 +487,86 @@ export function buildTweetFromOembed(o: OEmbed, id: string): Extracted {
   }
 }
 
+interface FxThreadResponse {
+  code: number;
+  message?: string;
+  status?: FxTweet;
+  thread?: FxTweet[] | null;
+}
+
+const FX_HEADERS = { 'user-agent': 'Readlater/1.0 (read-it-later; +https://github.com/FxEmbed/FxEmbed)' };
+
+async function fetchThreadPage(id: string): Promise<FxThreadResponse | null> {
+  try {
+    const r = await fetchJson<FxThreadResponse>(`https://api.fxtwitter.com/2/thread/${id}`, { headers: FX_HEADERS });
+    return r.code === 200 && r.status ? r : null;
+  } catch {
+    return null;
+  }
+}
+
+/** FxTwitter returns about 30 posts after the requested one; a page that full may have been cut off. */
+const THREAD_PAGE_FULL = 20;
+
+/**
+ * Self-thread around post `id` via FxTwitter's thread endpoint. One page holds a few dozen posts around the
+ * requested one, so long threads are paged by re-requesting at the current head/tail (at most 4 more requests).
+ * Returns the v2 focal post and the chain (focal included), or null when the endpoint is unavailable.
+ */
+export async function fetchSelfThread(id: string): Promise<{ status: FxTweet; thread: FxTweet[] } | null> {
+  const first = await fetchThreadPage(id);
+  if (!first?.status) return null;
+  const focal = first.status;
+  const author = focal.author.screen_name.toLowerCase();
+  const pool = new Map<string, FxTweet>();
+  const add = (list: FxTweet[] | null | undefined) => {
+    let added = 0;
+    for (const t of list ?? []) {
+      if (t?.id && !pool.has(t.id)) {
+        pool.set(t.id, t);
+        added++;
+      }
+    }
+    return added;
+  };
+  add(first.thread);
+  let chain = selfThread(focal, [...pool.values()]);
+  const after = (from: string) => chain.length - 1 - chain.findIndex((t) => t.id === from);
+  let tailRun = after(id);
+  const asked = new Set<string>([id]);
+  for (let i = 0; i < 4 && chain.length < MAX_THREAD_POSTS; i++) {
+    const head = chain[0];
+    const tail = chain[chain.length - 1];
+    const headParent = parentId(head);
+    const headCut = !!headParent && !pool.has(headParent) && replyingTo(head)?.toLowerCase() === author && !asked.has(head.id);
+    const tailCut = tailRun >= THREAD_PAGE_FULL && !asked.has(tail.id);
+    const next = headCut ? head.id : tailCut ? tail.id : null;
+    if (!next) break;
+    asked.add(next);
+    const page = await fetchThreadPage(next);
+    if (!page || !add(page.thread)) break;
+    chain = selfThread(focal, [...pool.values()]);
+    if (next === tail.id) tailRun = after(tail.id);
+  }
+  return { status: focal, thread: chain };
+}
+
 export async function extractTweet(id: string): Promise<Extracted> {
   let fxError: unknown = null;
+  const threadP = fetchSelfThread(id).catch(() => null);
   try {
-    const r = await fetchJson<{ code: number; message?: string; tweet?: FxTweet }>(`https://api.fxtwitter.com/status/${id}`, {
-      headers: { 'user-agent': 'Readlater/1.0 (read-it-later; +https://github.com/FxEmbed/FxEmbed)' },
-    });
-    if (r.code === 200 && r.tweet) return buildTweet(r.tweet);
+    const r = await fetchJson<{ code: number; message?: string; tweet?: FxTweet }>(`https://api.fxtwitter.com/status/${id}`, { headers: FX_HEADERS });
+    if (r.code === 200 && r.tweet) {
+      const tweet = r.tweet;
+      const th = await threadP;
+      return buildTweet(tweet, th ? th.thread.map((p) => (p.id === tweet.id ? tweet : p)) : []);
+    }
     fxError = new FetchError(r.message ?? 'not found', r.code);
   } catch (e) {
     fxError = e;
   }
+  const th = await threadP;
+  if (th) return buildTweet(th.status, th.thread);
   try {
     const o = await fetchJson<OEmbed>(
       `https://publish.x.com/oembed?url=${encodeURIComponent(`https://twitter.com/i/status/${id}`)}&omit_script=1&dnt=true`,

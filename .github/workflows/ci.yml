@@ -61,6 +61,44 @@ jobs:
         run: npm run build
         working-directory: web
 
+      - name: E2E typecheck
+        if: hashFiles('e2e/package.json') != ''
+        run: npm run typecheck
+        working-directory: e2e
+
+  extension:
+    name: Browser extension
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check scripts
+        run: for f in extension/*.js; do node --check "$f"; done
+
+      - name: Check manifest
+        run: |
+          node -e '
+            const m = JSON.parse(require("fs").readFileSync("extension/manifest.json", "utf8"));
+            if (m.manifest_version !== 3) throw new Error("manifest_version must be 3");
+            for (const k of ["name", "version", "action", "background", "permissions"]) if (!m[k]) throw new Error("manifest has no " + k);
+            console.log(m.name + " " + m.version + " (MV" + m.manifest_version + ")");'
+
+      - name: Build store packages
+        run: bash extension/build.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: readlater-extension
+          path: |
+            extension/dist/readlater-extension.zip
+            extension/dist/readlater-extension-firefox.zip
+          if-no-files-found: error
+
   e2e:
     name: End-to-end (emulators)
     runs-on: ubuntu-latest
@@ -100,6 +138,10 @@ jobs:
         if: steps.e2e.outputs.present == 'true'
         run: npx playwright install --with-deps chromium
         working-directory: e2e
+
+      - name: Functions tests on the Firestore and Storage emulators
+        if: steps.e2e.outputs.present == 'true'
+        run: npm run test:emulators
 
       - name: Run end-to-end tests
         if: steps.e2e.outputs.present == 'true'

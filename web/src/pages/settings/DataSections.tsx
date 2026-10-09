@@ -55,7 +55,7 @@ export function ExportSection() {
         <div className="set-export-row">
           <div>
             <span className="set-label">Feeds (OPML)</span>
-            <span className="small muted">{feeds ? `${feeds.length} feeds, for any RSS reader` : '…'}</span>
+            <span className="small muted">{feeds ? `${feeds.length} ${feeds.length === 1 ? 'feed' : 'feeds'}, for any RSS reader` : '…'}</span>
           </div>
           <button
             type="button"

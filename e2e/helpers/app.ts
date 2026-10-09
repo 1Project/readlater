@@ -64,11 +64,14 @@ export async function googleSignIn(page: Page, account: Account): Promise<void> 
   await expect(page).not.toHaveURL(/\/login/, { timeout: 30_000 });
 }
 
-/** The signed-in Firebase user of the page (read from the Auth SDK's IndexedDB persistence). */
-export async function currentUser(page: Page): Promise<{ uid: string; email: string | null }> {
+/**
+ * The signed-in Firebase user of the page (read from the Auth SDK's IndexedDB persistence), with its current
+ * ID token for calling functions from the test.
+ */
+export async function currentUser(page: Page): Promise<{ uid: string; email: string | null; idToken: string }> {
   const user = await page.evaluate(
     () =>
-      new Promise<{ uid: string; email: string | null } | null>((resolve, reject) => {
+      new Promise<{ uid: string; email: string | null; idToken: string } | null>((resolve, reject) => {
         const req = indexedDB.open('firebaseLocalStorageDb');
         req.onerror = () => reject(req.error);
         req.onsuccess = () => {
@@ -76,8 +79,10 @@ export async function currentUser(page: Page): Promise<{ uid: string; email: str
           const tx = db.transaction('firebaseLocalStorage', 'readonly');
           const all = tx.objectStore('firebaseLocalStorage').getAll();
           all.onsuccess = () => {
-            const rec = (all.result as { fbase_key: string; value: { uid: string; email?: string } }[]).find((r) => r.fbase_key.startsWith('firebase:authUser:'));
-            resolve(rec ? { uid: rec.value.uid, email: rec.value.email ?? null } : null);
+            const rec = (all.result as { fbase_key: string; value: { uid: string; email?: string; stsTokenManager?: { accessToken?: string } } }[]).find((r) =>
+              r.fbase_key.startsWith('firebase:authUser:'),
+            );
+            resolve(rec ? { uid: rec.value.uid, email: rec.value.email ?? null, idToken: rec.value.stsTokenManager?.accessToken ?? '' } : null);
           };
           all.onerror = () => reject(all.error);
         };
@@ -114,4 +119,63 @@ export function row(page: Page, title: string | RegExp): Locator {
 /** A Library view tab ("Unread", "Archive", "Favorites", "All"). */
 export function viewTab(page: Page, view: 'Unread' | 'Archive' | 'Favorites' | 'All'): Locator {
   return page.getByRole('navigation', { name: 'Library views' }).getByRole('button', { name: new RegExp(`^${view}`) });
+}
+
+/**
+ * Replaces window.speechSynthesis in every page of the context with a scripted stand-in. Headless Chromium has
+ * no voices and may never fire the events read-aloud waits for, so the Listen tests drive the real player
+ * through this instead: each utterance "speaks" for `ms` (then fires `end`), cancel() fires an `interrupted`
+ * error like Chrome does, and the spoken texts are kept in window.__spoken.
+ */
+export async function fakeSpeech(ctx: BrowserContext, ms = 4000): Promise<void> {
+  await ctx.addInitScript((duration: number) => {
+    const spoken: string[] = [];
+    let current: SpeechSynthesisUtterance | null = null;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const events = new EventTarget();
+    const fire = (u: SpeechSynthesisUtterance, type: string, extra: Record<string, unknown> = {}) => u.dispatchEvent(Object.assign(new Event(type), extra));
+    const finishLater = (u: SpeechSynthesisUtterance) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (current !== u) return;
+        current = null;
+        synth.speaking = false;
+        fire(u, 'end');
+      }, duration);
+    };
+    const synth = {
+      speaking: false,
+      pending: false,
+      paused: false,
+      onvoiceschanged: null,
+      getVoices: () => [],
+      speak(u: SpeechSynthesisUtterance) {
+        spoken.push(u.text);
+        current = u;
+        synth.speaking = true;
+        setTimeout(() => current === u && fire(u, 'start'), 0);
+        if (!synth.paused) finishLater(u);
+      },
+      cancel() {
+        clearTimeout(timer);
+        const u = current;
+        current = null;
+        synth.speaking = false;
+        if (u) fire(u, 'error', { error: 'interrupted' });
+      },
+      pause() {
+        synth.paused = true;
+        clearTimeout(timer);
+      },
+      resume() {
+        synth.paused = false;
+        if (current) finishLater(current);
+      },
+      addEventListener: events.addEventListener.bind(events),
+      removeEventListener: events.removeEventListener.bind(events),
+      dispatchEvent: events.dispatchEvent.bind(events),
+    };
+    Object.defineProperty(window, 'speechSynthesis', { configurable: true, get: () => synth });
+    (window as unknown as { __spoken: string[] }).__spoken = spoken;
+  }, ms);
 }

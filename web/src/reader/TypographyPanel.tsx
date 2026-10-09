@@ -3,14 +3,15 @@
  *
  * export default TypographyPanel
  * Props: { open: boolean; onClose: () => void }
- * Edits per-device prefs (lib/prefs): font size (− / +), family, line height, width, justify,
- * images on/off, theme quick switch (auto/light/dark/e-ink) and reading mode (Scroll / Pages).
+ * Edits per-device prefs (lib/prefs): font size (− / +), family (every FONT_FAMILIES entry, each shown in
+ * its own face), line height, width, justify, images on/off, theme (every THEMES entry, as in Settings) and
+ * reading mode (Scroll / Pages). Long option rows wrap, so they fit 360 px.
  * Closes on Esc, on the × button and when tapping outside it (except on the toolbar button that
  * toggles it, marked [data-typography-toggle]).
  */
 import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import { Close } from '../components/Icons';
-import { setPref, usePrefs, type FontFamily, type Prefs, type ReaderMode, type Theme } from '../lib/prefs';
+import { FONT_FAMILIES, fontStack, setPref, THEMES, usePrefs, type FontFamily, type Prefs, type ReaderMode, type Theme } from '../lib/prefs';
 
 export interface TypographyPanelProps {
   open: boolean;
@@ -53,16 +54,18 @@ function Stepper({ label, value, display, min, max, step, onChange, decLabel, in
   );
 }
 
-function Segmented<T extends string>({ label, value, options, onChange }: {
+function Segmented<T extends string>({ label, value, options, onChange, wrap }: {
   label: string;
   value: T;
   options: { value: T; label: ReactNode; style?: CSSProperties }[];
   onChange: (v: T) => void;
+  /** Let the options wrap onto several rows (more than three options). */
+  wrap?: boolean;
 }) {
   return (
-    <div className="typo-row">
+    <div className={`typo-row${wrap ? ' typo-row-wrap' : ''}`}>
       <span className="typo-label">{label}</span>
-      <div className="segmented" role="group" aria-label={label}>
+      <div className={`segmented${wrap ? ' segmented-wrap' : ''}`} role="group" aria-label={label}>
         {options.map((o) => (
           <button key={o.value} type="button" className="btn" aria-pressed={value === o.value} style={o.style} onClick={() => onChange(o.value)}>
             {o.label}
@@ -126,11 +129,8 @@ export default function TypographyPanel({ open, onClose }: TypographyPanelProps)
         label="Font"
         value={prefs.fontFamily}
         onChange={set('fontFamily')}
-        options={[
-          { value: 'serif', label: 'Serif', style: { fontFamily: 'var(--font-serif)' } },
-          { value: 'sans', label: 'Sans', style: { fontFamily: 'var(--font-sans)' } },
-          { value: 'mono', label: 'Mono', style: { fontFamily: 'var(--font-mono)' } },
-        ]}
+        wrap
+        options={FONT_FAMILIES.map((f) => ({ value: f.value, label: f.label, style: { fontFamily: fontStack(f.value) } }))}
       />
       <Stepper
         label="Line height"
@@ -177,17 +177,7 @@ export default function TypographyPanel({ open, onClose }: TypographyPanelProps)
           { value: 'paginate', label: 'Pages' },
         ]}
       />
-      <Segmented<Theme>
-        label="Theme"
-        value={prefs.theme}
-        onChange={set('theme')}
-        options={[
-          { value: 'system', label: 'Auto' },
-          { value: 'light', label: 'Light' },
-          { value: 'dark', label: 'Dark' },
-          { value: 'eink', label: 'E-ink' },
-        ]}
-      />
+      <Segmented<Theme> label="Theme" value={prefs.theme} onChange={set('theme')} wrap options={THEMES} />
     </div>
   );
 }

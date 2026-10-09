@@ -30,12 +30,8 @@ export interface Candidate {
   entry: ParsedEntry;
 }
 
-/**
- * Entries worth considering for this refresh (before checking which already exist):
- * first fetch → the newest FIRST_FETCH_LIMIT; later → entries from the last 30 days plus undated ones.
- * Entries without guid and link are skipped; duplicate ids keep the first occurrence. Newest first when dated.
- */
-export function candidateEntries(feedId: string, entries: ParsedEntry[], firstFetch: boolean, now: Date = new Date()): Candidate[] {
+/** Entries with an id (guid or link), duplicates removed; newest first when every entry is dated. */
+export function allCandidates(feedId: string, entries: ParsedEntry[]): Candidate[] {
   const seen = new Set<string>();
   const list: Candidate[] = [];
   for (const entry of entries) {
@@ -50,9 +46,43 @@ export function candidateEntries(feedId: string, entries: ParsedEntry[], firstFe
   if (list.length && list.every((c) => c.entry.publishedAt)) {
     list.sort((a, b) => b.entry.publishedAt!.getTime() - a.entry.publishedAt!.getTime());
   }
+  return list;
+}
+
+/**
+ * Entries worth considering for this refresh (before checking which already exist or were seen):
+ * first fetch → the newest FIRST_FETCH_LIMIT; later → entries from the last 30 days that are not older than
+ * the feed's `since` watermark (set by the first fetch), plus undated ones.
+ * Entries without guid and link are skipped; duplicate ids keep the first occurrence. Newest first when dated.
+ */
+export function candidateEntries(feedId: string, entries: ParsedEntry[], firstFetch: boolean, now: Date = new Date(), since: Date | null = null): Candidate[] {
+  const list = allCandidates(feedId, entries);
   if (firstFetch) return list.slice(0, FIRST_FETCH_LIMIT);
-  const cutoff = now.getTime() - MAX_AGE_MS;
+  const cutoff = Math.max(now.getTime() - MAX_AGE_MS, since?.getTime() ?? 0);
   return list.filter((c) => !c.entry.publishedAt || c.entry.publishedAt.getTime() >= cutoff);
+}
+
+/** Most entries marked as seen on a first fetch. */
+export const MAX_SEEN_ON_FIRST_FETCH = 200;
+
+/**
+ * What a first fetch leaves behind, so that later refreshes do not add the backlog it skipped:
+ * `since` — the oldest publication date taken (null when nothing was skipped or nothing taken is dated), and
+ * `rest` — skipped entries a later refresh would still pick up (undated, or dated within the window and not
+ * older than `since`), to be marked as seen.
+ */
+export function firstFetchLeftovers(feedId: string, entries: ParsedEntry[], now: Date = new Date()): { since: Date | null; rest: Candidate[] } {
+  const list = allCandidates(feedId, entries);
+  if (list.length <= FIRST_FETCH_LIMIT) return { since: null, rest: [] };
+  const taken = list.slice(0, FIRST_FETCH_LIMIT);
+  const dates = taken.map((c) => c.entry.publishedAt?.getTime()).filter((t): t is number => typeof t === 'number');
+  const since = dates.length ? new Date(Math.min(...dates)) : null;
+  const cutoff = Math.max(now.getTime() - MAX_AGE_MS, since?.getTime() ?? 0);
+  const rest = list
+    .slice(FIRST_FETCH_LIMIT)
+    .filter((c) => !c.entry.publishedAt || c.entry.publishedAt.getTime() >= cutoff)
+    .slice(0, MAX_SEEN_ON_FIRST_FETCH);
+  return { since, rest };
 }
 
 /** Drop candidates that already exist, then apply the per-refresh caps. */
@@ -75,9 +105,9 @@ export function capNewEntries(cands: Candidate[], existing: Set<string>): Candid
 export function selectNewEntries(
   feedId: string,
   entries: ParsedEntry[],
-  opts: { firstFetch: boolean; existing?: Set<string>; now?: Date },
+  opts: { firstFetch: boolean; existing?: Set<string>; now?: Date; since?: Date | null },
 ): Candidate[] {
-  return capNewEntries(candidateEntries(feedId, entries, opts.firstFetch, opts.now), opts.existing ?? new Set());
+  return capNewEntries(candidateEntries(feedId, entries, opts.firstFetch, opts.now, opts.since ?? null), opts.existing ?? new Set());
 }
 
 /** Item type from the link: YouTube/Vimeo → video, arXiv/DOI → paper, X status → tweet, otherwise article. */

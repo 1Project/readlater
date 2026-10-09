@@ -1,11 +1,14 @@
 rules_version = '2';
 
-// Readlater Firestore security rules. Data model: docs/SPEC.md.
+// Readlater Firestore security rules. Data model: docs/SPEC.md and docs/SPEC-2.md.
 //
 // - Deny by default. Everything lives under users/{uid}; only that user can read it.
+//   The one public exception is shares/{token} (public share links: get only, no listing).
 // - Cloud Functions use the Admin SDK and bypass these rules, so server-owned
-//   fields (contentChunks, fetchError, paper, ...) and collections (content,
-//   search, apiKeys, top-level loginCodes/apiKeys/rateLimits) are not client-writable.
+//   fields (contentChunks, fetchError, paper, rulesApplied, aiSummary, shareToken, ...)
+//   and collections (content, search, apiKeys, integrations, top-level loginCodes/
+//   apiKeys/rateLimits/shares/telegramLinks/telegramChats/inboundAddresses/emailDedupe)
+//   are not client-writable.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -82,6 +85,11 @@ service cloud.firestore {
       return v is number && v >= 0 && v <= 1;
     }
 
+    // SPEC-2: how an item was saved. Optional; the client may set it only on create.
+    function isSource(v) {
+      return v in ['web', 'app', 'extension', 'bookmarklet', 'api', 'telegram', 'email', 'feed', 'import'];
+    }
+
     // An uploaded file must live at users/{uid}/uploads/{itemId}/{fileName}.
     function isUploadFile(f, uid, itemId) {
       let parts = f['path'] is string ? f['path'].split('/') : [];
@@ -102,10 +110,13 @@ service cloud.firestore {
         && f['size'] <= 100 * 1024 * 1024;
     }
 
+    // Server-only item fields (rulesApplied, aiSummary, shareToken) are in neither
+    // list, so clients can neither create nor change them.
     function validNewItem(uid, itemId) {
       let d = request.resource.data;
       return d.keys().hasAll(itemFields())
-        && d.keys().hasOnly(itemFields())
+        && d.keys().hasOnly(itemFields().concat(['source']))
+        && (!('source' in d) || isSource(d.source))
         && isNullOrStr(d.url, 2048)
         && isItemType(d.type)
         && isLocation(d.location)
@@ -136,6 +147,15 @@ service cloud.firestore {
         && isNullOrTimestamp(d.archivedAt);
     }
 
+    // Server bookkeeping of a processing run (processingAt, processingRun, processAttempts, retryAt) is in
+    // neither field list, so clients cannot write it.
+    function requeueAllowed() {
+      return resource.data.fetchStatus != 'processing'
+        || !('processingAt' in resource.data)
+        || !(resource.data.processingAt is timestamp)
+        || request.time > resource.data.processingAt + duration.value(10, 'm');
+    }
+
     // Only changed keys are validated, so server-written values (e.g. a long
     // extracted title) never block unrelated client updates such as progress.
     // A removed key fails its check (missing field access), so keys can't be deleted.
@@ -161,8 +181,9 @@ service cloud.firestore {
         && (!('tags' in ch) || isTags(d.tags))
         && (!('note' in ch) || isStr(d.note, 20000))
         && (!('progress' in ch) || isProgress(d.progress))
-        // The client may only (re)queue processing.
-        && (!('fetchStatus' in ch) || d.fetchStatus == 'pending')
+        // The client may only (re)queue processing, and not while a run is still working on the item
+        // (a run that has not finished after 10 minutes is dead: processItem times out after 5).
+        && (!('fetchStatus' in ch) || (d.fetchStatus == 'pending' && requeueAllowed()))
         // The client may only clear an error (refetch); never write one.
         && (!('fetchError' in ch) || d.fetchError == null)
         // The client may attach its upload only while the item is still uploading.
@@ -178,7 +199,8 @@ service cloud.firestore {
 
     function validHighlight(d) {
       return d.keys().hasAll(['itemId', 'text', 'note', 'prefix', 'suffix', 'createdAt', 'updatedAt'])
-        && d.keys().hasOnly(['itemId', 'text', 'note', 'prefix', 'suffix', 'createdAt', 'updatedAt'])
+        && d.keys().hasOnly(['itemId', 'text', 'note', 'prefix', 'suffix', 'createdAt', 'updatedAt', 'color'])
+        && (!('color' in d) || d.color in ['yellow', 'green', 'blue', 'pink'])
         && isId(d.itemId)
         && isNonEmptyStr(d.text, 5000)
         && isStr(d.note, 5000)
@@ -195,6 +217,48 @@ service cloud.firestore {
         && d.keys().hasOnly(['name', 'order', 'createdAt'])
         && isNonEmptyStr(d.name, 60)
         && d.order is number
+        && d.createdAt is timestamp;
+    }
+
+    // ---- saved views (SPEC-2) ------------------------------------------------
+
+    function validView(d) {
+      return d.keys().hasAll(['name', 'params', 'order', 'createdAt'])
+        && d.keys().hasOnly(['name', 'params', 'order', 'createdAt'])
+        && isNonEmptyStr(d.name, 60)
+        && isStr(d.params, 1000)
+        && d.order is number
+        && d.createdAt is timestamp;
+    }
+
+    // ---- auto rules (SPEC-2) -------------------------------------------------
+
+    function isRuleMatch(m) {
+      return m is map
+        && m.keys().hasAll(['field', 'op', 'value'])
+        && m.keys().hasOnly(['field', 'op', 'value'])
+        && m.field in ['domain', 'url', 'title', 'feed', 'type', 'source']
+        && m.op in ['is', 'contains', 'endsWith']
+        && isNonEmptyStr(m.value, 500);
+    }
+
+    function isRuleActions(a) {
+      return a is map
+        && a.keys().hasOnly(['addTags', 'categoryId', 'location', 'favorite', 'archive'])
+        && (!('addTags' in a) || isTags(a.addTags))
+        && (!('categoryId' in a) || isNullOrId(a.categoryId))
+        && (!('location' in a) || isLocation(a.location))
+        && (!('favorite' in a) || a.favorite is bool)
+        && (!('archive' in a) || a.archive is bool);
+    }
+
+    function validRule(d) {
+      return d.keys().hasAll(['name', 'enabled', 'match', 'actions', 'createdAt'])
+        && d.keys().hasOnly(['name', 'enabled', 'match', 'actions', 'createdAt'])
+        && isStr(d.name, 100)
+        && d.enabled is bool
+        && isRuleMatch(d.match)
+        && isRuleActions(d.actions)
         && d.createdAt is timestamp;
     }
 
@@ -252,11 +316,35 @@ service cloud.firestore {
         allow delete: if isOwner(uid);
       }
 
-      // search/{itemId} and apiKeys/{keyId}: server-written; owner read only
-      // (granted above). API keys are revoked through the revokeApiKey callable.
+      match /views/{viewId} {
+        allow create: if isOwner(uid) && validView(request.resource.data);
+        allow update: if isOwner(uid)
+          && validView(request.resource.data)
+          && request.resource.data.createdAt == resource.data.createdAt;
+        allow delete: if isOwner(uid);
+      }
+
+      match /rules/{ruleId} {
+        allow create: if isOwner(uid) && validRule(request.resource.data);
+        allow update: if isOwner(uid)
+          && validRule(request.resource.data)
+          && request.resource.data.createdAt == resource.data.createdAt;
+        allow delete: if isOwner(uid);
+      }
+
+      // search/{itemId}, apiKeys/{keyId} and integrations/{telegram|email}: server-written;
+      // owner read only (granted above). API keys are revoked through the revokeApiKey
+      // callable, integrations changed through their callables.
     }
 
-    // Top-level loginCodes, apiKeys and rateLimits are server-only: no rule
-    // grants access, so all client reads and writes are denied.
+    // Public share links: anyone may fetch one snapshot by its unguessable token,
+    // but nobody may list them; written only by the createShare/revokeShare callables.
+    match /shares/{token} {
+      allow get: if true;
+    }
+
+    // Top-level loginCodes, apiKeys, rateLimits, telegramLinks, telegramChats,
+    // inboundAddresses and emailDedupe are server-only: no rule grants access, so all
+    // client reads and writes are denied.
   }
 }

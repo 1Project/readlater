@@ -7,10 +7,13 @@
  * - If every emulator port answers, the running emulators are reused and left running afterwards
  *   (`npm run emulators` in another terminal makes repeated runs fast). Otherwise `firebase emulators:start`
  *   is spawned and stopped again in the returned teardown.
- * - Behind an outbound HTTP proxy (HTTPS_PROXY set): the firebase CLI must not see the proxy variables (it
- *   would send its own calls to the local emulators through the proxy), but the functions need them to fetch
- *   pages. The proxy is therefore handed to the functions through functions/.env.local (read only by the
- *   emulator, gitignored), which is created here and removed again in teardown.
+ * - functions/.env.local (read only by the emulator, gitignored) is created here and removed again in teardown.
+ *   It switches on the optional integrations with test settings (helpers/integrations.ts: a Telegram bot, an
+ *   inbound email domain and an Anthropic key, with the Telegram and Anthropic APIs pointed at local fakes).
+ *   Behind an outbound HTTP proxy (HTTPS_PROXY set) it also hands the proxy to the functions: the firebase CLI
+ *   must not see the proxy variables (it would send its own calls to the local emulators through the proxy),
+ *   but the functions need them to fetch pages. An existing functions/.env.local is left alone (the
+ *   integration tests then skip what it does not configure).
  */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
@@ -18,6 +21,7 @@ import { connect } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PROJECT_ID } from './helpers/emulators';
+import { FUNCTIONS_TEST_ENV } from './helpers/integrations';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PORTS = { auth: 9099, firestore: 8080, functions: 5001, storage: 9199, hosting: 5000 };
@@ -92,14 +96,18 @@ export default async function globalSetup(): Promise<(() => Promise<void>) | voi
 
   const envLocal = join(ROOT, 'functions', '.env.local');
   let createdEnvLocal = false;
-  if (proxy) {
-    if (!existsSync(envLocal)) {
-      const noProxy = process.env.NO_PROXY || process.env.no_proxy || 'localhost,127.0.0.1';
-      writeFileSync(envLocal, `# Written by e2e/global-setup.ts for the functions emulator; removed after the run.\nHTTPS_PROXY=${proxy}\nNO_PROXY=${noProxy}\n`);
-      createdEnvLocal = true;
-    } else if (!/^HTTPS_PROXY=/m.test(readFileSync(envLocal, 'utf8'))) {
-      console.warn('[e2e] functions/.env.local exists without HTTPS_PROXY; functions may not reach the internet through the proxy.');
+  if (!existsSync(envLocal)) {
+    const lines = ['# Written by e2e/global-setup.ts for the functions emulator; removed after the run.'];
+    if (proxy) {
+      // The local fakes (Telegram, Anthropic) and the emulators are reached directly.
+      const noProxy = [process.env.NO_PROXY || process.env.no_proxy || '', 'localhost', '127.0.0.1'].filter(Boolean).join(',');
+      lines.push(`HTTPS_PROXY=${proxy}`, `NO_PROXY=${noProxy}`);
     }
+    for (const [k, v] of Object.entries(FUNCTIONS_TEST_ENV)) lines.push(`${k}=${v}`);
+    writeFileSync(envLocal, `${lines.join('\n')}\n`);
+    createdEnvLocal = true;
+  } else if (proxy && !/^HTTPS_PROXY=/m.test(readFileSync(envLocal, 'utf8'))) {
+    console.warn('[e2e] functions/.env.local exists without HTTPS_PROXY; functions may not reach the internet through the proxy.');
   }
 
   console.log('[e2e] Starting Firebase emulators…');

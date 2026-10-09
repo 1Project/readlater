@@ -79,4 +79,52 @@ describe.skipIf(!live)('live extraction', () => {
     expect(r.title).toMatch(/Never Gonna Give You Up/);
     expect(r.imageUrl).toMatch(/^https:\/\/i\.ytimg\.com\//);
   }, 60_000);
+
+  it('falls back to the Internet Archive for a dead page (archive.org may rate-limit this network)', async () => {
+    const url = 'https://www.google.com/reader/about/';
+    try {
+      const r = await extractUrl(url);
+      log('wayback (dead page)', r);
+      expect(r.html.startsWith('<p class="rl-note"><em>Loaded from the Internet Archive snapshot of ')).toBe(true);
+      expect(r.canonicalUrl).toBe(url);
+      expect(r.wordCount).toBeGreaterThan(20);
+    } catch (e) {
+      // No reachable archive: the original error must come through unchanged.
+      process.stderr.write(`\n[live] wayback (dead page): ${(e as Error).message}\n`);
+      expect((e as Error).message).toBe('HTTP 404 fetching www.google.com');
+    }
+  }, 120_000);
+
+  it('falls back to the Internet Archive for a blocked/paywalled page', async () => {
+    const url = 'https://www.economist.com/finance-and-economics/2024/01/04/the-world-economy-in-2024';
+    try {
+      const r = await extractUrl(url);
+      log('wayback (paywalled)', r);
+      expect(r.html).toContain('class="rl-note"');
+    } catch (e) {
+      process.stderr.write(`\n[live] wayback (paywalled): ${(e as Error).message}\n`);
+      expect((e as Error).message).toMatch(/^HTTP 4\d\d fetching www\.economist\.com$/);
+    }
+  }, 120_000);
+
+  it('adds a YouTube transcript when YouTube allows it', async () => {
+    const r = await extractUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+    log('youtube transcript', r);
+    const hasTranscript = r.html.includes('<h2>Transcript');
+    process.stderr.write(`\n[live] youtube transcript: ${hasTranscript ? 'yes' : 'no (blocked / bot check)'}\n`);
+    expect(r.type).toBe('video');
+    if (hasTranscript) {
+      expect(r.html).toMatch(/<p><a href="https:\/\/www\.youtube\.com\/watch\?v=dQw4w9WgXcQ&amp;t=\d+s">\d+:\d\d<\/a> /);
+      expect(r.text).toMatch(/strangers/i);
+    }
+  }, 120_000);
+
+  it('extracts an X self-thread', async () => {
+    const r = await extractUrl('https://x.com/naval/status/1002103360646823936');
+    log('x thread', r);
+    expect(r.title).toMatch(/^@naval: How to Get Rich/);
+    expect(r.html).toMatch(/Thread · (\d+) posts/);
+    expect(Number(/Thread · (\d+) posts/.exec(r.html)![1])).toBeGreaterThan(30);
+    expect(r.text).toContain('Seek wealth, not money or status');
+  }, 120_000);
 });

@@ -1,4 +1,7 @@
-/** Target of the "link a device" QR code: redeems `?code=` automatically, then goes to the library. */
+/**
+ * Target of the "link a device" QR code: asks before redeeming `?code=` (a link from someone else must not
+ * quietly sign this device into their account), then goes to the library.
+ */
 import { useEffect, useRef, useState } from 'react';
 import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router';
 import { normalizeCode, redeemLoginCode, useUser } from '../lib/data';
@@ -15,15 +18,15 @@ export default function Link() {
   const [state, setState] = useState<State | null>(null);
   const started = useRef(false);
 
-  useEffect(() => {
-    // Wait until auth state is known; never replace an existing session automatically.
+  function redeem() {
+    // Never replace an existing session.
     if (user !== null || started.current || code.length !== 8) return;
     started.current = true;
     setState({ kind: 'working' });
     redeemLoginCode(code)
       .then(() => setState({ kind: 'done' }))
       .catch((e: unknown) => setState({ kind: 'error', message: authErrorMessage(e) ?? 'Could not sign in.' }));
-  }, [user, code]);
+  }
 
   useEffect(() => {
     if (state?.kind !== 'done') return;
@@ -35,7 +38,7 @@ export default function Link() {
   if (state?.kind === 'done') {
     body = (
       <>
-        <p className="auth-status">Signed in. Opening your library…</p>
+        <p className="auth-status">Signed in{user?.email ? ` as ${user.email}` : ''}. Opening your library…</p>
         <RouterLink className="btn btn-primary auth-wide" to="/" replace>
           Continue
         </RouterLink>
@@ -71,11 +74,25 @@ export default function Link() {
         </RouterLink>
       </>
     );
-  } else {
+  } else if (state?.kind === 'working') {
     body = (
       <p className="auth-status" aria-live="polite">
         Signing in with code <span className="code-display-inline">{formatCode(code)}</span>…
       </p>
+    );
+  } else if (user === undefined) {
+    body = null;
+  } else {
+    body = (
+      <>
+        <p className="auth-status">
+          Sign in on this device with code <span className="code-display-inline">{formatCode(code)}</span>?
+        </p>
+        <button type="button" className="btn btn-primary auth-wide" onClick={redeem}>
+          Sign in
+        </button>
+        <p className="small muted">Only continue if you created this code yourself, in Settings → Link a device on your other device.</p>
+      </>
     );
   }
 

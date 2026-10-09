@@ -102,11 +102,18 @@ export function hostOf(url: string | null | undefined): string {
 
 export const readingMinutes = (words: number): number => Math.ceil(words / 230);
 
-/** Client IP of an HTTP request (Cloud Functions sits behind Google's front end, which sets x-forwarded-for). */
+/**
+ * Client IP of an HTTP request. Cloud Functions (Cloud Run) sit behind Google's front end, which appends the
+ * address it saw to x-forwarded-for; everything before that entry was sent by the client and can be forged,
+ * so the right-most entry is the one to trust.
+ */
 export function clientIp(req: { ip?: string; headers?: Record<string, string | string[] | undefined> }): string {
   const xff = req.headers?.['x-forwarded-for'];
-  const first = (Array.isArray(xff) ? xff[0] : xff)?.split(',')[0]?.trim();
-  return first || req.ip || 'unknown';
+  const hops = (Array.isArray(xff) ? xff.join(',') : (xff ?? ''))
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return hops[hops.length - 1] || req.ip || 'unknown';
 }
 
 /** Public download URL for a Storage object carrying a firebaseStorageDownloadTokens token. */

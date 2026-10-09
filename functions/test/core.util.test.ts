@@ -66,8 +66,11 @@ describe('util', () => {
     expect(readingMinutes(231)).toBe(2);
   });
 
-  it('clientIp prefers the first x-forwarded-for hop', () => {
-    expect(clientIp({ ip: '10.0.0.1', headers: { 'x-forwarded-for': '1.2.3.4, 10.0.0.1' } })).toBe('1.2.3.4');
+  it('clientIp trusts only the hop appended by the front end (the last x-forwarded-for entry)', () => {
+    // A client can send its own x-forwarded-for; Google's front end appends the real address after it.
+    expect(clientIp({ ip: '10.0.0.1', headers: { 'x-forwarded-for': '1.2.3.4, 203.0.113.9' } })).toBe('203.0.113.9');
+    expect(clientIp({ ip: '10.0.0.1', headers: { 'x-forwarded-for': ['1.2.3.4', '198.51.100.7 '] } })).toBe('198.51.100.7');
+    expect(clientIp({ ip: '10.0.0.1', headers: { 'x-forwarded-for': '203.0.113.9' } })).toBe('203.0.113.9');
     expect(clientIp({ ip: '5.6.7.8', headers: {} })).toBe('5.6.7.8');
     expect(clientIp({ headers: {} })).toBe('unknown');
   });
