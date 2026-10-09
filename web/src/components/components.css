@@ -1,0 +1,711 @@
+/* Shared component styles. Only CSS variables from styles.css — no colour literals — so the
+   e-ink theme stays pure black on white.
+   This file can load before styles.css (main.tsx imports App first), so rules that refine a
+   primitive (.btn, .chip, .dialog, .toast, …) use a more specific selector instead of relying
+   on source order. */
+
+.icon {
+  flex: none;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.btn.btn-small {
+  min-height: 34px;
+  padding: 0 10px;
+  font-size: 0.875rem;
+  gap: 4px;
+}
+:root[data-theme='eink'] .btn-small {
+  min-height: 44px;
+  font-size: 0.95rem;
+}
+.btn.btn-danger-solid,
+.btn.btn-danger-solid:hover {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--accent-fg);
+}
+:root[data-theme='eink'] .btn-danger-solid {
+  background: var(--fg);
+  color: var(--bg);
+}
+
+/* ---------- Forms (used inside dialogs) ---------- */
+
+.form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.field-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.field-label .muted {
+  font-weight: 400;
+}
+.textarea.title-field {
+  min-height: 0;
+  max-height: 10em;
+  resize: none;
+  font-weight: 600;
+  field-sizing: content;
+}
+
+/* ---------- Dialog ---------- */
+
+.dialog-backdrop > .dialog {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  outline: none;
+}
+.dialog-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 8px 4px 20px;
+}
+.dialog-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 1.15rem;
+}
+.dialog-form {
+  display: contents;
+}
+.dialog-body {
+  padding: 8px 20px 20px;
+}
+.dialog-footer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+:root[data-theme='eink'] .dialog-footer {
+  border-top-width: 2px;
+}
+.confirm-message {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 420px) {
+  body > .dialog-backdrop {
+    padding: 8px;
+    align-items: flex-start;
+  }
+  .dialog-backdrop > .dialog {
+    max-height: calc(100vh - 16px);
+    max-height: calc(100dvh - 16px);
+  }
+  .dialog-header {
+    padding-left: 16px;
+  }
+  .dialog-body {
+    padding: 8px 16px 16px;
+  }
+  .dialog-footer {
+    padding: 12px 16px;
+  }
+}
+
+/* ---------- Toast ---------- */
+
+.toast-region > .toast {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: max-content;
+  min-height: var(--tap);
+  padding: 6px 8px 6px 16px;
+}
+.toast-message {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  cursor: default;
+}
+.toast-action {
+  flex: none;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid currentColor;
+  border-radius: var(--radius);
+  background: transparent;
+  color: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.toast-region > .toast-error {
+  background: var(--danger);
+  color: var(--accent-fg);
+}
+:root[data-theme='eink'] .toast {
+  border: 2px solid var(--fg);
+}
+:root[data-theme='eink'] .toast-region > .toast-error {
+  background: var(--fg);
+  color: var(--bg);
+}
+
+/* ---------- Tag input ---------- */
+
+.tag-input-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tag-input {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--tap);
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  cursor: text;
+}
+.tag-input.focused {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+:root[data-theme='eink'] .tag-input {
+  border-width: 2px;
+}
+.chip.tag-chip {
+  padding: 0 2px 0 10px;
+  cursor: default;
+  max-width: 100%;
+}
+.tag-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tag-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: -2px 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.tag-chip-remove:hover {
+  background: var(--hover);
+}
+:root[data-theme='eink'] .tag-chip-remove {
+  width: 36px;
+  height: 36px;
+}
+.tag-input-field {
+  flex: 1;
+  min-width: 8ch;
+  min-height: 30px;
+  padding: 0 4px;
+  border: 0;
+  outline: none;
+  background: transparent;
+}
+.tag-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip.tag-suggestion {
+  min-height: 32px;
+  color: var(--muted);
+}
+.chip.tag-suggestion.active {
+  color: var(--bg);
+}
+:root[data-theme='eink'] .chip.tag-suggestion {
+  min-height: 40px;
+  color: var(--fg);
+}
+:root[data-theme='eink'] .chip.tag-suggestion.active {
+  color: var(--bg);
+}
+
+/* ---------- Category select ---------- */
+
+.category-create {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.row.category-create-row {
+  flex-wrap: nowrap;
+}
+.category-create-row .input {
+  flex: 1;
+  min-width: 0;
+}
+@media (max-width: 400px) {
+  .row.category-create-row {
+    flex-wrap: wrap;
+  }
+  .category-create-row .input {
+    flex-basis: 100%;
+  }
+}
+
+/* ---------- Type badge ---------- */
+
+.type-badge {
+  display: inline-block;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1.6;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+:root[data-theme='eink'] .type-badge {
+  color: var(--fg);
+}
+
+/* ---------- Progress bar ---------- */
+
+.progress {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  background: var(--border);
+  border-radius: 999px;
+}
+.progress-thin {
+  height: 3px;
+}
+.progress-normal {
+  height: 8px;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width var(--transition);
+}
+:root[data-theme='eink'] .progress {
+  background: var(--bg);
+  border: 1px solid var(--fg);
+}
+:root[data-theme='eink'] .progress-thin {
+  height: 5px;
+}
+:root[data-theme='eink'] .progress-fill {
+  background: var(--fg);
+}
+
+/* ---------- Spinner ---------- */
+
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px 16px;
+  color: var(--muted);
+}
+.loading-inline {
+  display: inline-flex;
+  padding: 0;
+  font-size: 0.875rem;
+}
+.loading-ring {
+  flex: none;
+  width: 1em;
+  height: 1em;
+  border: 2px solid var(--border);
+  border-top-color: var(--fg);
+  border-radius: 50%;
+  animation: rl-spin 0.8s linear infinite;
+}
+@keyframes rl-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+:root[data-theme='eink'] .loading-ring {
+  display: none;
+}
+:root[data-theme='eink'] .loading {
+  color: var(--fg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .loading-ring {
+    display: none;
+  }
+}
+
+/* ---------- Empty state ---------- */
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.empty-icon {
+  color: var(--faint);
+}
+.empty-title {
+  margin: 0;
+  font-size: 1.05rem;
+  color: var(--fg);
+}
+.empty-text {
+  max-width: 44ch;
+}
+.empty-action {
+  margin-top: 8px;
+}
+:root[data-theme='eink'] .empty-icon {
+  color: var(--fg);
+}
+
+/* ---------- Menu ---------- */
+
+.menu {
+  position: relative;
+  display: inline-flex;
+}
+.menu-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  z-index: 50;
+  min-width: 200px;
+  max-width: min(320px, calc(100vw - 24px));
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--fg) 14%, transparent);
+}
+.menu-end {
+  right: 0;
+}
+.menu-start {
+  left: 0;
+}
+.menu-up {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+:root[data-theme='eink'] .menu-list {
+  border-width: 2px;
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0 12px;
+  border: 0;
+  border-radius: calc(var(--radius) - 2px);
+  background: transparent;
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+}
+.menu-item:hover,
+.menu-item:focus-visible {
+  background: var(--hover);
+}
+:root[data-theme='eink'] .menu-item:focus-visible {
+  outline: 2px solid var(--fg);
+  outline-offset: -2px;
+}
+.menu-item:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.menu-item.danger {
+  color: var(--danger);
+}
+.menu-icon {
+  display: inline-flex;
+  color: var(--muted);
+}
+.menu-item.danger .menu-icon {
+  color: inherit;
+}
+:root[data-theme='eink'] .menu-icon {
+  color: var(--fg);
+}
+.menu-label {
+  flex: 1;
+  min-width: 0;
+}
+.menu-separator {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border);
+}
+
+/* ---------- Item list / row ---------- */
+
+.item-list {
+  display: flex;
+  flex-direction: column;
+}
+.item-list-more {
+  display: flex;
+  justify-content: center;
+  padding: 16px 0;
+}
+.item-list-more .btn {
+  min-width: 60%;
+}
+
+.item-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 8px 8px 9px;
+  border-bottom: 1px solid var(--border);
+  border-left: 3px solid transparent;
+  scroll-margin: 64px 0;
+}
+.item-row.selected {
+  border-left-color: var(--accent);
+  background: var(--surface);
+}
+:root[data-theme='eink'] .item-row.selected {
+  border-left-width: 6px;
+  padding-left: 6px;
+}
+.item-row.compact {
+  gap: 4px;
+  padding-top: 8px;
+  padding-bottom: 4px;
+}
+.item-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+}
+.item-text {
+  flex: 1;
+  min-width: 0;
+}
+.item-title {
+  margin: 0;
+  font-size: 1.02rem;
+  font-weight: 650;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.item-title a {
+  text-decoration: none;
+}
+.item-title a:hover {
+  text-decoration: underline;
+}
+.item-meta {
+  margin-top: 3px;
+  font-size: 0.82rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.item-excerpt {
+  margin: 4px 0 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.item-thumb {
+  flex: none;
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: calc(var(--radius) - 2px);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.item-progress {
+  margin-top: 2px;
+}
+.item-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.875rem;
+}
+.item-error {
+  flex: 1 1 200px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+:root[data-theme='eink'] .item-error {
+  font-weight: 600;
+}
+.item-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.item-chips {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.chip.item-chip {
+  min-height: 26px;
+  max-width: 100%;
+  padding: 0 8px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chip.item-chip:hover {
+  color: var(--fg);
+}
+.chip.item-category {
+  color: var(--fg);
+}
+.item-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+/* The favorite toggle shows state with a filled star rather than an inverted button. */
+.item-actions .btn.item-fav[aria-pressed='true'] {
+  background: transparent;
+  border-color: transparent;
+  color: var(--accent);
+}
+.item-actions .btn.item-fav[aria-pressed='true']:hover {
+  background: var(--hover);
+}
+:root[data-theme='eink'] .item-row {
+  border-bottom-width: 2px;
+}
+:root[data-theme='eink'] .item-meta,
+:root[data-theme='eink'] .item-excerpt,
+:root[data-theme='eink'] .chip.item-chip {
+  color: var(--fg);
+}
+:root[data-theme='eink'] .chip.item-chip {
+  min-height: 32px;
+}
+:root[data-theme='eink'] .item-actions .btn.item-fav[aria-pressed='true'] {
+  color: var(--fg);
+}
+@media (max-width: 400px) {
+  .item-thumb {
+    width: 56px;
+    height: 56px;
+  }
+  .item-actions .btn-small {
+    padding: 0 8px;
+  }
+}
+
+/* ---------- Add dialog ---------- */
+
+.add-dialog.dragging {
+  outline: 3px dashed var(--accent);
+  outline-offset: -8px;
+}
+:root[data-theme='eink'] .add-dialog.dragging {
+  outline-color: var(--fg);
+}
+.add-url-row {
+  display: flex;
+  gap: 8px;
+}
+.add-url-row .input {
+  flex: 1;
+  min-width: 0;
+}
+.add-or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.add-or::before,
+.add-or::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+:root[data-theme='eink'] .add-or {
+  color: var(--fg);
+}
+.add-file-button {
+  align-self: flex-start;
+}
+.add-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--tap);
+  padding: 0 4px 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+:root[data-theme='eink'] .add-file {
+  border-width: 2px;
+}
+.add-file-name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+}
+.add-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.add-progress .progress {
+  flex: 1;
+}

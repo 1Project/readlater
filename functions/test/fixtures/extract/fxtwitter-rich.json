@@ -1,0 +1,133 @@
+{
+ "code": 200,
+ "message": "OK",
+ "tweet": {
+  "url": "https://x.com/readlater_dev/status/1800000000000000001",
+  "id": "1800000000000000001",
+  "text": "Hey @jack, read this: https://example.com/article #reading\n\nSecond paragraph & <more>",
+  "raw_text": {
+   "text": "Hey @jack, read this: https://t.co/abc123 #reading\n\nSecond paragraph & <more> https://t.co/pic999",
+   "display_text_range": [
+    0,
+    77
+   ],
+   "facets": [
+    {
+     "type": "mention",
+     "indices": [
+      4,
+      9
+     ],
+     "original": "jack",
+     "id": "12"
+    },
+    {
+     "type": "url",
+     "indices": [
+      22,
+      41
+     ],
+     "original": "https://t.co/abc123",
+     "replacement": "https://example.com/article",
+     "display": "example.com/article"
+    },
+    {
+     "type": "hashtag",
+     "indices": [
+      42,
+      50
+     ],
+     "original": "reading"
+    },
+    {
+     "type": "media",
+     "indices": [
+      78,
+      97
+     ],
+     "original": "https://t.co/pic999",
+     "replacement": "https://x.com/readlater_dev/status/1800000000000000001/photo/1"
+    }
+   ]
+  },
+  "author": {
+   "screen_name": "readlater_dev",
+   "name": "Readlater Dev",
+   "avatar_url": "https://pbs.twimg.com/profile_images/1/avatar_200x200.jpg",
+   "url": "https://x.com/readlater_dev"
+  },
+  "created_at": "Sat Jun 15 12:00:00 +0000 2024",
+  "created_timestamp": 1718452800,
+  "replying_to": "jack",
+  "lang": "en",
+  "media": {
+   "all": [
+    {
+     "type": "photo",
+     "url": "https://pbs.twimg.com/media/PHOTO1.jpg?name=orig",
+     "width": 1200,
+     "height": 800,
+     "altText": "A stack of books"
+    }
+   ],
+   "photos": [
+    {
+     "type": "photo",
+     "url": "https://pbs.twimg.com/media/PHOTO1.jpg?name=orig",
+     "width": 1200,
+     "height": 800,
+     "altText": "A stack of books"
+    }
+   ]
+  },
+  "poll": {
+   "choices": [
+    {
+     "label": "Paper",
+     "count": 120,
+     "percentage": 60
+    },
+    {
+     "label": "E-ink",
+     "count": 80,
+     "percentage": 40
+    }
+   ],
+   "total_votes": 200,
+   "ends_at": "2024-06-16T12:00:00Z",
+   "time_left_en": "Final results"
+  },
+  "quote": {
+   "url": "https://x.com/other/status/1799999999999999999",
+   "id": "1799999999999999999",
+   "text": "The original thought.",
+   "raw_text": {
+    "text": "The original thought.",
+    "display_text_range": [
+     0,
+     21
+    ],
+    "facets": []
+   },
+   "author": {
+    "screen_name": "other",
+    "name": "Other Person"
+   },
+   "created_timestamp": 1718366400,
+   "media": {
+    "photos": [
+     {
+      "type": "photo",
+      "url": "https://pbs.twimg.com/media/QUOTED.jpg",
+      "width": 10,
+      "height": 10
+     }
+    ]
+   }
+  },
+  "community_note": {
+   "text": "Context: see https://example.org/context",
+   "facets": []
+  }
+ }
+}

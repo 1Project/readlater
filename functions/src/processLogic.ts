@@ -1,0 +1,92 @@
+/** Pure decision/patch logic for processItem (no Firebase app access, unit-tested). */
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import type { Extracted } from './extract/types';
+import { buildKeywords } from './searchIndex';
+import { hostOf, readingMinutes, truncate } from './util';
+
+export type ItemData = Record<string, unknown>;
+export type Action = 'process' | 'reindex' | 'none';
+
+export interface StoredFile {
+  path: string;
+  name: string;
+  contentType: string;
+  size: number;
+}
+
+const INDEXED_FIELDS = ['title', 'author', 'siteName', 'note', 'url', 'tags'] as const;
+
+/** What processItem should do for a write. Never reacts to its own writes (pending→processing→done). */
+export function decideAction(before: ItemData | undefined, after: ItemData | undefined): Action {
+  if (!after) return 'none';
+  const st = after.fetchStatus;
+  if (st === 'pending' && (!before || before.fetchStatus !== 'pending')) return 'process';
+  if (before && (st === 'done' || st === 'error') && before.fetchStatus === st) {
+    const changed = INDEXED_FIELDS.some((f) => JSON.stringify(before[f] ?? null) !== JSON.stringify(after[f] ?? null));
+    if (changed) return 'reindex';
+  }
+  return 'none';
+}
+
+const s = (v: unknown): string => (typeof v === 'string' ? v : '');
+
+/** Search keywords for an item: metadata first, then body text. */
+export function itemKeywords(item: ItemData, bodyText: string): string[] {
+  const tags = Array.isArray(item.tags) ? (item.tags as unknown[]).filter((t) => typeof t === 'string').join(' ') : '';
+  const paper = (item.paper ?? null) as { authors?: unknown } | null;
+  const authors = Array.isArray(paper?.authors) ? (paper!.authors as unknown[]).filter((a) => typeof a === 'string').join(' ') : '';
+  return buildKeywords({
+    meta: [s(item.title), s(item.author), s(item.siteName), tags, s(item.note), hostOf(s(item.url) || null), authors],
+    body: bodyText,
+  });
+}
+
+/** Item fields to write after a successful extraction. `cur` is the item as it is now (user edits respected). */
+export function donePatch(cur: ItemData, ex: Extracted, chunks: number, file: StoredFile | null): ItemData {
+  const words = ex.wordCount > 0 ? ex.wordCount : 0;
+  const published = ex.publishedAt && !Number.isNaN(ex.publishedAt.getTime()) ? Timestamp.fromDate(ex.publishedAt) : (cur.publishedAt ?? null);
+  const patch: ItemData = {
+    type: ex.type,
+    author: ex.author ?? cur.author ?? null,
+    siteName: ex.siteName ?? cur.siteName ?? null,
+    excerpt: ex.excerpt ?? cur.excerpt ?? null,
+    imageUrl: ex.imageUrl ?? cur.imageUrl ?? null,
+    publishedAt: published,
+    wordCount: words || null,
+    readingMinutes: words ? readingMinutes(words) : null,
+    contentChunks: chunks,
+    paper: ex.paper ?? cur.paper ?? null,
+    fetchStatus: 'done',
+    fetchError: null,
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+  if (!cur.titleLocked && ex.title && ex.title.trim()) patch.title = ex.title.trim();
+  if (file) patch.file = file;
+  return patch;
+}
+
+/** The item as it will look after the patch (for indexing). */
+export function merged(cur: ItemData, patch: ItemData): ItemData {
+  return { ...cur, ...patch };
+}
+
+/** Human-readable error message for fetchError (≤ 300 chars). */
+export function errorMessage(e: unknown): string {
+  const m = e instanceof Error ? e.message : typeof e === 'string' ? e : '';
+  return truncate(m.replace(/\s+/g, ' ').trim() || 'Could not extract this item', 300);
+}
+
+/** 'pdf' | 'epub' for a stored file, from content type, then extension, then magic bytes. */
+export function fileKind(file: { name?: string; contentType?: string; path?: string }, head?: Buffer): 'pdf' | 'epub' | null {
+  const ct = (file.contentType ?? '').toLowerCase();
+  if (ct.includes('pdf')) return 'pdf';
+  if (ct.includes('epub')) return 'epub';
+  const name = (file.name || file.path || '').toLowerCase();
+  if (name.endsWith('.pdf')) return 'pdf';
+  if (name.endsWith('.epub')) return 'epub';
+  if (head) {
+    if (head.subarray(0, 1024).toString('latin1').includes('%PDF-')) return 'pdf';
+    if (head.subarray(0, 2).toString('latin1') === 'PK') return 'epub';
+  }
+  return null;
+}

@@ -1,0 +1,226 @@
+{
+ "code": 200,
+ "message": "OK",
+ "tweet": {
+  "url": "https://x.com/writer/status/1900000000000000002",
+  "id": "1900000000000000002",
+  "text": "https://x.com/i/article/1900000000000000003",
+  "raw_text": {
+   "text": "https://t.co/art",
+   "display_text_range": [
+    0,
+    16
+   ],
+   "facets": [
+    {
+     "type": "url",
+     "indices": [
+      0,
+      16
+     ],
+     "original": "https://t.co/art",
+     "replacement": "https://x.com/i/article/1900000000000000003",
+     "display": "x.com/i/article/1900000000000000003"
+    }
+   ]
+  },
+  "author": {
+   "screen_name": "writer",
+   "name": "A Writer"
+  },
+  "created_timestamp": 1735689600,
+  "media": {},
+  "article": {
+   "id": "1900000000000000003",
+   "title": "How I Read 100 Books",
+   "preview_text": "A long-form note on reading habits.",
+   "created_at": "2025-01-01T00:00:00Z",
+   "cover_media": {
+    "id": "m0",
+    "media_key": "3_0",
+    "media_id": "500",
+    "media_info": {
+     "__typename": "ApiImage",
+     "original_img_url": "https://pbs.twimg.com/media/COVER.jpg",
+     "original_img_width": 1600,
+     "original_img_height": 900
+    }
+   },
+   "media_entities": [
+    {
+     "id": "m1",
+     "media_key": "3_1",
+     "media_id": "501",
+     "media_info": {
+      "__typename": "ApiImage",
+      "original_img_url": "https://pbs.twimg.com/media/INLINE.jpg",
+      "original_img_width": 800,
+      "original_img_height": 600
+     }
+    }
+   ],
+   "content": {
+    "blocks": [
+     {
+      "key": "a",
+      "type": "unstyled",
+      "text": "It started with a simple rule.",
+      "data": {},
+      "entityRanges": [],
+      "inlineStyleRanges": [
+       {
+        "offset": 18,
+        "length": 6,
+        "style": "Bold"
+       }
+      ]
+     },
+     {
+      "key": "b",
+      "type": "header-two",
+      "text": "The rules",
+      "data": {},
+      "entityRanges": [],
+      "inlineStyleRanges": []
+     },
+     {
+      "key": "c",
+      "type": "unordered-list-item",
+      "text": "Read every day",
+      "data": {},
+      "entityRanges": [],
+      "inlineStyleRanges": []
+     },
+     {
+      "key": "d",
+      "type": "unordered-list-item",
+      "text": "Quit bad books",
+      "data": {},
+      "entityRanges": [],
+      "inlineStyleRanges": [
+       {
+        "offset": 5,
+        "length": 3,
+        "style": "Italic"
+       }
+      ]
+     },
+     {
+      "key": "e",
+      "type": "atomic",
+      "text": " ",
+      "data": {},
+      "entityRanges": [
+       {
+        "key": 0,
+        "offset": 0,
+        "length": 1
+       }
+      ],
+      "inlineStyleRanges": []
+     },
+     {
+      "key": "f",
+      "type": "unstyled",
+      "text": "More at my blog.",
+      "data": {},
+      "entityRanges": [
+       {
+        "key": 1,
+        "offset": 8,
+        "length": 7
+       }
+      ],
+      "inlineStyleRanges": []
+     },
+     {
+      "key": "g",
+      "type": "atomic",
+      "text": " ",
+      "data": {},
+      "entityRanges": [
+       {
+        "key": 2,
+        "offset": 0,
+        "length": 1
+       }
+      ],
+      "inlineStyleRanges": []
+     },
+     {
+      "key": "h",
+      "type": "blockquote",
+      "text": "Books are uniquely portable magic.",
+      "data": {},
+      "entityRanges": [],
+      "inlineStyleRanges": []
+     },
+     {
+      "key": "i",
+      "type": "atomic",
+      "text": " ",
+      "data": {},
+      "entityRanges": [
+       {
+        "key": 3,
+        "offset": 0,
+        "length": 1
+       }
+      ],
+      "inlineStyleRanges": []
+     }
+    ],
+    "entityMap": [
+     {
+      "key": "0",
+      "value": {
+       "type": "MEDIA",
+       "mutability": "Immutable",
+       "data": {
+        "entityKey": "0",
+        "mediaItems": [
+         {
+          "localMediaId": "x",
+          "mediaCategory": "DraftTweetImage",
+          "mediaId": "501"
+         }
+        ]
+       }
+      }
+     },
+     {
+      "key": "1",
+      "value": {
+       "type": "LINK",
+       "mutability": "Mutable",
+       "data": {
+        "url": "https://blog.example.com/"
+       }
+      }
+     },
+     {
+      "key": "2",
+      "value": {
+       "type": "TWEET",
+       "mutability": "Immutable",
+       "data": {
+        "tweetId": "20"
+       }
+      }
+     },
+     {
+      "key": "3",
+      "value": {
+       "type": "MARKDOWN",
+       "mutability": "Mutable",
+       "data": {
+        "entityKey": "3",
+        "markdown": "```js\nconsole.log('hi')\n```"
+       }
+      }
+     }
+    ]
+   }
+  }
+ }
+}

@@ -1,0 +1,489 @@
+{
+ "status": "ok",
+ "message-type": "work",
+ "message-version": "1.0.0",
+ "message": {
+  "reference-count": 105,
+  "publisher": "eLife Sciences Publications, Ltd",
+  "funder": [
+   {
+    "name": "Gordon and Betty Moore Foundation Marine Microbiology Initiative"
+   },
+   {
+    "DOI": "10.13039/100000002",
+    "name": "National Institutes of Health",
+    "doi-asserted-by": "crossref",
+    "award": [
+     "F32 GM086054"
+    ],
+    "award-info": [
+     {
+      "award-number": [
+       "F32 GM086054"
+      ]
+     }
+    ],
+    "id": [
+     {
+      "id": "10.13039/100000002",
+      "id-type": "DOI",
+      "asserted-by": "crossref"
+     }
+    ]
+   },
+   {
+    "DOI": "10.13039/100000002",
+    "name": "National Institutes of Health",
+    "doi-asserted-by": "crossref",
+    "award": [
+     "F32 GM089018"
+    ],
+    "award-info": [
+     {
+      "award-number": [
+       "F32 GM089018"
+      ]
+     }
+    ],
+    "id": [
+     {
+      "id": "10.13039/100000002",
+      "id-type": "DOI",
+      "asserted-by": "crossref"
+     }
+    ]
+   },
+   {
+    "DOI": "10.13039/100000002",
+    "name": "National Institutes of Health",
+    "doi-asserted-by": "crossref",
+    "award": [
+     "R01 GM086258"
+    ],
+    "award-info": [
+     {
+      "award-number": [
+       "R01 GM086258"
+      ]
+     }
+    ],
+    "id": [
+     {
+      "id": "10.13039/100000002",
+      "id-type": "DOI",
+      "asserted-by": "crossref"
+     }
+    ]
+   },
+   {
+    "DOI": "10.13039/100000002",
+    "name": "National Institutes of Health",
+    "doi-asserted-by": "crossref",
+    "award": [
+     "R01 GM099533"
+    ],
+    "award-info": [
+     {
+      "award-number": [
+       "R01 GM099533"
+      ]
+     }
+    ],
+    "id": [
+     {
+      "id": "10.13039/100000002",
+      "id-type": "DOI",
+      "asserted-by": "crossref"
+     }
+    ]
+   },
+   {
+    "DOI": "10.13039/100000002",
+    "name": "National Institutes of Health",
+    "doi-asserted-by": "crossref",
+    "award": [
+     "T32 HG00047"
+    ],
+    "award-info": [
+     {
+      "award-number": [
+       "T32 HG00047"
+      ]
+     }
+    ],
+    "id": [
+     {
+      "id": "10.13039/100000002",
+      "id-type": "DOI",
+      "asserted-by": "crossref"
+     }
+    ]
+   },
+   {
+    "DOI": "10.13039/100000936",
+    "name": "Gordon and Betty Moore Foundation",
+    "doi-asserted-by": "publisher",
+    "id": [
+     {
+      "id": "10.13039/100000936",
+      "id-type": "DOI",
+      "asserted-by": "publisher"
+     }
+    ]
+   },
+   {
+    "DOI": "10.13039/100000002",
+    "name": "National Institutes of Health",
+    "doi-asserted-by": "publisher",
+    "award": [
+     "F32 GM086054"
+    ],
+    "award-info": [
+     {
+      "award-number": [
+       "F32 GM086054"
+      ]
+     }
+    ],
+    "id": [
+     {
+      "id": "10.13039/100000002",
+      "id-type": "DOI",
+      "asserted-by": "publisher"
+     }
+    ]
+   },
+   {
+    "DOI": "10.13039/100000002",
+    "name": "National Institutes of Health",
+    "doi-asserted-by": "publisher",
+    "award": [
+     "F32 GM089018"
+    ],
+    "award-info": [
+     {
+      "award-number": [
+       "F32 GM089018"
+      ]
+     }
+    ],
+    "id": [
+     {
+      "id": "10.13039/100000002",
+      "id-type": "DOI",
+      "asserted-by": "publisher"
+     }
+    ]
+   },
+   {
+    "DOI": "10.13039/100000002",
+    "name": "National Institutes of Health",
+    "doi-asserted-by": "publisher",
+    "award": [
+     "R01 GM086258"
+    ],
+    "award-info": [
+     {
+      "award-number": [
+       "R01 GM086258"
+      ]
+     }
+    ],
+    "id": [
+     {
+      "id": "10.13039/100000002",
+      "id-type": "DOI",
+      "asserted-by": "publisher"
+     }
+    ]
+   },
+   {
+    "DOI": "10.13039/100000002",
+    "name": "National Institutes of Health",
+    "doi-asserted-by": "publisher",
+    "award": [
+     "R01 GM099533"
+    ],
+    "award-info": [
+     {
+      "award-number": [
+       "R01 GM099533"
+      ]
+     }
+    ],
+    "id": [
+     {
+      "id": "10.13039/100000002",
+      "id-type": "DOI",
+      "asserted-by": "publisher"
+     }
+    ]
+   },
+   {
+    "DOI": "10.13039/100000002",
+    "name": "National Institutes of Health",
+    "doi-asserted-by": "publisher",
+    "award": [
+     "T32 HG00047"
+    ],
+    "award-info": [
+     {
+      "award-number": [
+       "T32 HG00047"
+      ]
+     }
+    ],
+    "id": [
+     {
+      "id": "10.13039/100000002",
+      "id-type": "DOI",
+      "asserted-by": "publisher"
+     }
+    ]
+   }
+  ],
+  "short-container-title": [],
+  "abstract": "<jats:p>Bacterially-produced small molecules exert profound influences on animal health, morphogenesis, and evolution through poorly understood mechanisms. In one of the closest living relatives of animals, the choanoflagellate Salpingoeca rosetta, we find that rosette colony development is induced by the prey bacterium Algoriphagus machipongonensis and its close relatives in the Bacteroidetes phylum. Here we show that a rosette inducing factor (RIF-1) produced by A. machipongonensis belongs to the small class of sulfonolipids, obscure relatives of the better known sphingolipids that play important roles in signal transmission in plants, animals, and fungi. RIF-1 has extraordinary potency (femtomolar, or 10−15 M) and S. rosetta can respond to it over a broad dynamic range—nine orders of magnitude. This study provides a prototypical example of bacterial sulfonolipids triggering eukaryotic morphogenesis and suggests molecular mechanisms through which bacteria may have contributed to the evolution of animals.</jats:p>",
+  "DOI": "10.7554/elife.00013",
+  "type": "journal-article",
+  "created": {
+   "date-parts": [
+    [
+     2012,
+     10,
+     15
+    ]
+   ],
+   "date-time": "2012-10-15T10:10:09Z",
+   "timestamp": 1350295809000
+  },
+  "source": "Crossref",
+  "is-referenced-by-count": 243,
+  "title": [
+   "A bacterial sulfonolipid triggers multicellular development in the closest living relatives of animals"
+  ],
+  "prefix": "10.7554",
+  "volume": "1",
+  "author": [
+   {
+    "given": "Rosanna A",
+    "family": "Alegado",
+    "sequence": "first",
+    "affiliation": [
+     {
+      "name": "Department of Molecular and Cell Biology, University of California, Berkeley, Berkeley, United States"
+     }
+    ],
+    "role": [
+     {
+      "vocabulary": "crossref",
+      "role": "author"
+     }
+    ]
+   },
+   {
+    "given": "Laura W",
+    "family": "Brown",
+    "sequence": "additional",
+    "affiliation": [
+     {
+      "name": "Department of Biological Chemistry and Molecular Pharmacology, Harvard Medical School, Boston, United States"
+     }
+    ],
+    "role": [
+     {
+      "vocabulary": "crossref",
+      "role": "author"
+     }
+    ]
+   },
+   {
+    "given": "Shugeng",
+    "family": "Cao",
+    "sequence": "additional",
+    "affiliation": [
+     {
+      "name": "Department of Biological Chemistry and Molecular Pharmacology, Harvard Medical School, Boston, United States"
+     }
+    ],
+    "role": [
+     {
+      "vocabulary": "crossref",
+      "role": "author"
+     }
+    ]
+   },
+   {
+    "given": "Renee K",
+    "family": "Dermenjian",
+    "sequence": "additional",
+    "affiliation": [
+     {
+      "name": "Department of Biological Chemistry and Molecular Pharmacology, Harvard Medical School, Boston, United States"
+     }
+    ],
+    "role": [
+     {
+      "vocabulary": "crossref",
+      "role": "author"
+     }
+    ]
+   },
+   {
+    "given": "Richard",
+    "family": "Zuzow",
+    "sequence": "additional",
+    "affiliation": [
+     {
+      "name": "Department of Biochemistry, Stanford University School of Medicine, Stanford, United States"
+     }
+    ],
+    "role": [
+     {
+      "vocabulary": "crossref",
+      "role": "author"
+     }
+    ]
+   },
+   {
+    "given": "Stephen R",
+    "family": "Fairclough",
+    "sequence": "additional",
+    "affiliation": [
+     {
+      "name": "Department of Molecular and Cell Biology, University of California, Berkeley, Berkeley, United States"
+     }
+    ],
+    "role": [
+     {
+      "vocabulary": "crossref",
+      "role": "author"
+     }
+    ]
+   },
+   {
+    "given": "Jon",
+    "family": "Clardy",
+    "sequence": "additional",
+    "affiliation": [
+     {
+      "name": "Department of Biological Chemistry and Molecular Pharmacology, Harvard Medical School, Boston, United States"
+     }
+    ],
+    "role": [
+     {
+      "vocabulary": "crossref",
+      "role": "author"
+     }
+    ]
+   },
+   {
+    "given": "Nicole",
+    "family": "King",
+    "sequence": "additional",
+    "affiliation": [
+     {
+      "name": "Department of Molecular and Cell Biology, University of California, Berkeley, Berkeley, United States"
+     }
+    ],
+    "role": [
+     {
+      "vocabulary": "crossref",
+      "role": "author"
+     }
+    ]
+   }
+  ],
+  "member": "4374",
+  "published-online": {
+   "date-parts": [
+    [
+     2012,
+     10,
+     15
+    ]
+   ]
+  },
+  "container-title": [
+   "eLife"
+  ],
+  "original-title": [],
+  "language": "en",
+  "link": [
+   {
+    "URL": "https://cdn.elifesciences.org/articles/00013/elife-00013-v1.pdf",
+    "content-type": "application/pdf",
+    "content-version": "vor",
+    "intended-application": "text-mining"
+   },
+   {
+    "URL": "https://cdn.elifesciences.org/articles/00013/elife-00013-v1.xml",
+    "content-type": "application/xml",
+    "content-version": "vor",
+    "intended-application": "text-mining"
+   },
+   {
+    "URL": "https://elifesciences.org/articles/00013",
+    "content-type": "unspecified",
+    "content-version": "vor",
+    "intended-application": "similarity-checking"
+   }
+  ],
+  "deposited": {
+   "date-parts": [
+    [
+     2023,
+     10,
+     11
+    ]
+   ],
+   "date-time": "2023-10-11T20:37:30Z",
+   "timestamp": 1697056650000
+  },
+  "score": 1,
+  "resource": {
+   "primary": {
+    "URL": "https://elifesciences.org/articles/00013"
+   }
+  },
+  "subtitle": [],
+  "short-title": [],
+  "issued": {
+   "date-parts": [
+    [
+     2012,
+     10,
+     15
+    ]
+   ]
+  },
+  "references-count": 105,
+  "alternative-id": [
+   "10.7554/eLife.00013"
+  ],
+  "URL": "https://doi.org/10.7554/elife.00013",
+  "archive": [
+   "CLOCKSS"
+  ],
+  "ISSN": [
+   "2050-084X"
+  ],
+  "issn-type": [
+   {
+    "value": "2050-084X",
+    "type": "electronic"
+   }
+  ],
+  "subject": [],
+  "published": {
+   "date-parts": [
+    [
+     2012,
+     10,
+     15
+    ]
+   ]
+  },
+  "article-number": "e00013"
+ }
+}
