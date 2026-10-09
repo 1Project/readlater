@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Readlater options</title>
+  <link rel="stylesheet" href="ui.css">
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main class="wrap">
+    <header class="head">
+      <img src="icons/icon48.png" width="32" height="32" alt="">
+      <div>
+        <h1>Readlater</h1>
+        <p class="muted">Connect the extension to your Readlater server.</p>
+      </div>
+    </header>
+
+    <form id="form" class="card" novalidate>
+      <div class="field">
+        <label class="label" for="serverUrl">Server URL</label>
+        <input class="input" id="serverUrl" type="url" inputmode="url" placeholder="https://your-project.web.app" autocomplete="url" spellcheck="false" required>
+        <p class="help small muted">The address you open Readlater at. <code>http://</code> is only allowed for <code>localhost</code> / <code>127.0.0.1</code>.</p>
+      </div>
+
+      <div class="field">
+        <div class="row">
+          <label class="label" for="apiKey">API key</label>
+          <span class="spacer"></span>
+          <a class="small" id="createKey" href="#" target="_blank" rel="noopener">Create an API key</a>
+        </div>
+        <div class="row">
+          <input class="input" id="apiKey" type="password" placeholder="rl_…" autocomplete="off" spellcheck="false" required>
+          <button class="btn" id="toggleKey" type="button" aria-pressed="false">Show</button>
+        </div>
+        <p class="help small muted">Use <em>Create an API key</em> (opens Readlater’s Settings), create a key and paste it here. Leave both fields empty and save to disconnect.</p>
+      </div>
+
+      <div class="row actions">
+        <button class="btn btn-primary" id="saveBtn" type="submit">Save</button>
+        <button class="btn" id="testBtn" type="button">Test connection</button>
+        <span class="msg small" id="msg" role="status" aria-live="polite"></span>
+      </div>
+    </form>
+
+    <section class="card">
+      <h2>Preferences</h2>
+      <label class="check">
+        <input type="checkbox" id="captureHtml">
+        <span>
+          <strong>Send the rendered page</strong>
+          <span class="small muted">Saves exactly what you see, including pages behind a login or paywall. Turn off to send only the link and let the server fetch it.</span>
+        </span>
+      </label>
+      <label class="check">
+        <input type="checkbox" id="showBadge">
+        <span>
+          <strong>Show ✓ on pages you already saved</strong>
+          <span class="small muted">Checks the address of the tab you are looking at with your server (cached for 5 minutes).</span>
+        </span>
+      </label>
+    </section>
+
+    <section class="card">
+      <h2>How to save</h2>
+      <ul class="how">
+        <li>Click the toolbar button (<span id="kbdAction" class="kbd-slot"></span>) — saves the page and opens a panel for tags and a category.</li>
+        <li><span id="kbdSave" class="kbd-slot"></span> saves the page without opening the panel.</li>
+        <li>Right-click a page → <em>Save page to Readlater</em>, or a link → <em>Save link to Readlater</em>.</li>
+      </ul>
+      <p class="small muted" id="shortcutHelp">Change shortcuts at <code>chrome://extensions/shortcuts</code> (Chrome/Edge) or <em>about:addons → ⚙ → Manage Extension Shortcuts</em> (Firefox).</p>
+    </section>
+  </main>
+  <script src="lib.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

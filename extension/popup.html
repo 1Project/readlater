@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Readlater</title>
+  <link rel="stylesheet" href="ui.css">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main class="popup">
+    <header class="head">
+      <img src="icons/icon32.png" width="20" height="20" alt="">
+      <strong>Readlater</strong>
+      <span class="spacer"></span>
+      <button class="btn btn-ghost btn-icon" id="optionsBtn" type="button" title="Options" aria-label="Options">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+    </header>
+
+    <section class="status" id="status" role="status" aria-live="polite">
+      <span class="status-icon" id="statusIcon" aria-hidden="true"></span>
+      <span class="status-text" id="statusText">Saving…</span>
+      <span class="spacer"></span>
+      <button class="btn btn-ghost small hidden" id="retryBtn" type="button">Retry</button>
+      <button class="btn btn-ghost small hidden" id="fixBtn" type="button">Open options</button>
+    </section>
+
+    <section class="page">
+      <div class="page-title" id="pageTitle"></div>
+      <div class="muted small truncate" id="pageHost"></div>
+    </section>
+
+    <section class="fields" id="fields">
+      <div class="field">
+        <label class="label" for="tags">Tags</label>
+        <input class="input" id="tags" type="text" placeholder="e.g. design, to-share" title="Comma separated. Tab completes a suggestion, Enter saves." autocomplete="off" spellcheck="false">
+        <div class="suggest" id="suggest" aria-label="Suggested tags"></div>
+      </div>
+      <div class="field">
+        <label class="label" for="category">Category</label>
+        <select class="select" id="category">
+          <option value="">No category</option>
+        </select>
+      </div>
+      <div class="field">
+        <button class="linklike small" id="noteToggle" type="button" aria-expanded="false">+ Add a note</button>
+        <textarea class="textarea hidden" id="note" rows="2" placeholder="Why are you saving this?"></textarea>
+      </div>
+      <div class="sync small muted" id="syncState" aria-live="polite"></div>
+    </section>
+
+    <footer class="foot">
+      <a class="btn btn-primary" id="openItem" href="#" aria-disabled="true">Open in Readlater</a>
+      <a class="btn" id="openLibrary" href="#">Open library</a>
+    </footer>
+    <div class="hint small muted" id="shortcutHint"></div>
+  </main>
+  <script src="lib.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
