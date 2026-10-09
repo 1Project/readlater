@@ -42,8 +42,8 @@ async function shot(p: Page, name: string): Promise<void> {
   await p.screenshot({ path: `${DIR}${name}.png`, animations: 'disabled', caret: 'hide' });
 }
 
-async function signedIn(browser: Browser, opts: BrowserContextOptions & { theme?: 'light' | 'dark' | 'eink' }): Promise<Page> {
-  const ctx = await newContext(browser, opts);
+async function signedIn(browser: Browser, opts: BrowserContextOptions & { theme?: 'light' | 'dark' | 'sepia' | 'eink' }): Promise<Page> {
+  const ctx = await newContext(browser, opts as Parameters<typeof newContext>[1]);
   await fakeSpeech(ctx, 600_000);
   const p = await ctx.newPage();
   await googleSignIn(p, account);
@@ -236,6 +236,28 @@ test('phone app (390x844)', async ({ browser }) => {
   await d.context().close();
 });
 
+test('themes side by side (light, sepia, dark, e-ink)', async ({ browser }) => {
+  test.setTimeout(400_000);
+  for (const theme of ['light', 'sepia', 'dark', 'eink'] as const) {
+    const scheme = theme === 'dark' ? 'dark' : 'light';
+    const desk = await signedIn(browser, { ...DESKTOP, colorScheme: scheme, theme });
+    await shot(desk, `theme-${theme}-desktop-library`);
+    await openItem(desk, GREAT_WORK);
+    await expect(desk.locator('.reader-content mark.hl').first()).toBeVisible({ timeout: 20_000 });
+    await desk.locator('.reader-content mark.hl').first().scrollIntoViewIfNeeded();
+    await desk.mouse.wheel(0, -200);
+    await shot(desk, `theme-${theme}-desktop-reader`);
+    await desk.context().close();
+
+    const phone = await signedIn(browser, { ...PHONE, colorScheme: scheme, theme });
+    await shot(phone, `theme-${theme}-phone-library`);
+    await openItem(phone, GREAT_WORK);
+    await phone.waitForTimeout(800);
+    await shot(phone, `theme-${theme}-phone-reader`);
+    await phone.context().close();
+  }
+});
+
 test('Boox Go 6 e-reader (1072x1448, e-ink theme)', async ({ browser }) => {
   test.setTimeout(300_000);
   const p = await signedIn(browser, { ...BOOX, theme: 'eink' });
@@ -246,13 +268,13 @@ test('Boox Go 6 e-reader (1072x1448, e-ink theme)', async ({ browser }) => {
   await p.keyboard.press('ArrowRight');
   await p.keyboard.press('ArrowRight');
   await p.waitForTimeout(300);
-  // Middle tap shows the toolbar overlay in pages mode.
   await shot(p, 'boox-reader-page3');
-  await p.locator('.reader-toolbar').getByRole('button', { name: 'Back' }).click();
+  // In pages mode the toolbar is hidden until a middle tap; go back with the browser instead.
+  await p.goBack();
   await openItem(p, EPUB_TITLE);
   await p.waitForTimeout(500);
   await shot(p, 'boox-reader-epub');
-  await p.locator('.reader-toolbar').getByRole('button', { name: 'Back' }).click();
+  await p.goBack();
   await nav(p, 'Highlights');
   await expect(p.locator('.hls-quote').first()).toBeVisible();
   await shot(p, 'boox-highlights');
