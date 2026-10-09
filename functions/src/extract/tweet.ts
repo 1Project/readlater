@@ -376,7 +376,7 @@ export function buildTweet(t: FxTweet): Extracted {
     title: `@${handle}: ${firstLine ? truncate(firstLine, 80) : kind}`,
     author: `${collapseWs(t.author.name) || handle} (@${handle})`,
     siteName: 'X',
-    description: t.article?.preview_text ?? null,
+    excerpt: t.article?.preview_text || textOnly || null,
     imageUrl: t.article?.cover_media?.media_info?.original_img_url ?? firstPhoto ?? firstVideo ?? quotePhoto ?? t.author.avatar_url ?? null,
     publishedAt: t.created_timestamp ? t.created_timestamp * 1000 : t.created_at ?? null,
     canonicalUrl: `https://x.com/${handle}/status/${t.id}`,
@@ -416,6 +416,7 @@ export function buildTweetFromOembed(o: OEmbed, id: string): Extracted {
       title: `@${handle}: ${text ? truncate(text, 80) : 'Post'}`,
       author: `${author.name} (@${handle})`,
       siteName: 'X',
+      excerpt: text || null,
       publishedAt: date,
       canonicalUrl: `https://x.com/${handle}/status/${id}`,
     });

@@ -1,0 +1,4 @@
+<?xml version="1.0"?>
+<rss version="2.0"><channel><title>Single</title><link>https://single.example.org</link>
+<item><link>/only-item</link><description><![CDATA[<p>Just one entry, no title or date.</p>]]></description></item>
+</channel></rss>

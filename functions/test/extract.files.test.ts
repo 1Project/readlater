@@ -45,6 +45,8 @@ describe('PDF', () => {
         '<h2 data-page="2">Page 2</h2><h3>Methods</h3><p>Text on the second page continues the story for the reader.</p>',
     );
     expect(r.wordCount).toBeGreaterThan(50);
+    // The excerpt comes from the paragraphs, without page markers or headings.
+    expect(r.excerpt).toMatch(/^The first paragraph starts here/);
   });
 
   it('detects academic papers', async () => {
@@ -111,6 +113,16 @@ describe('PDF', () => {
     const { html } = pdfLinesToHtml([page(1), page(2), page(3), page(4)]);
     expect(html).not.toContain('Journal of Examples');
     expect(html).toContain('<p>Content of page 4 with enough words to be a paragraph.</p>');
+  });
+
+  it('recognises numbered section headings in body font', () => {
+    const lines: PdfLine[] = [
+      { text: 'Some closing sentence of the previous section that runs long.', x: 72, y: 700, fontSize: 10 },
+      { text: '2. Transactions', x: 72, y: 670, fontSize: 10 },
+      { text: 'We define an electronic coin as a chain of digital signatures here.', x: 72, y: 640, fontSize: 10 },
+      { text: '1. the first step is to collect all of the data you can find.', x: 72, y: 610, fontSize: 10 },
+    ];
+    expect(linesToBlocks(lines, 10).map((b) => b.kind)).toEqual(['p', 'h', 'p', 'p']);
   });
 
   it('picks titles sensibly', () => {

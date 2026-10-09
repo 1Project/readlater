@@ -59,6 +59,9 @@ export function itemsToLines(items: PdfTextItem[]): PdfLine[] {
 }
 
 const PAGE_NUM = /^(page\s+)?[-–—]?\s*\d{1,4}\s*[-–—]?(\s*(\/|of)\s*\d{1,4})?$|^[ivxlcdm]{1,6}$/i;
+/** Standalone section headings in body font: "2. Transactions", "3.1 Setup", "IV. RESULTS", "References". */
+const SECTION_HEADING =
+  /^((\d{1,2}(\.\d{1,2})*\.?|[IVX]{1,5}\.)\s+\p{Lu}[^.!?:;,]*|(abstract|introduction|references|bibliography|acknowledge?ments?|conclusions?|appendix( [A-Z])?|ABSTRACT|INTRODUCTION|REFERENCES|BIBLIOGRAPHY|ACKNOWLEDGE?MENTS?|CONCLUSIONS?)|(Abstract|Introduction|References|Bibliography|Acknowledge?ments?|Conclusions?|Appendix( [A-Z])?))$/u;
 const BULLET = /^([•◦▪▫‣⁃●○■□–—-]|\(?\d{1,3}[.)]|\(?[a-z][.)])\s+/i;
 
 function median(nums: number[]): number {
@@ -76,6 +79,13 @@ function joinLines(a: string, b: string): string {
 interface Block {
   kind: 'p' | 'h';
   text: string;
+}
+
+/** Plain text of the paragraphs (all blocks when there are none), for the excerpt. */
+export function pdfExcerptText(blocks: Block[][]): string {
+  const all = blocks.flat();
+  const paras = all.filter((b) => b.kind === 'p');
+  return (paras.length ? paras : all).map((b) => b.text).join(' ');
 }
 
 /** Remove running headers/footers and page numbers (first/last two lines of pages). */
@@ -133,7 +143,11 @@ export function linesToBlocks(lines: PdfLine[], bodySize: number): Block[] {
   let cur: { kind: 'p' | 'h'; text: string; size: number; lines: number } | null = null;
   let prev: PdfLine | null = null;
   const push = () => {
-    if (cur && cur.text.trim()) blocks.push({ kind: cur.kind === 'h' && cur.text.length <= 200 ? 'h' : 'p', text: cur.text });
+    if (cur && cur.text.trim()) {
+      const numberedHeading =
+        cur.kind === 'p' && cur.lines === 1 && cur.text.length <= 80 && cur.text.split(/\s+/).length <= 8 && SECTION_HEADING.test(cur.text);
+      blocks.push({ kind: (cur.kind === 'h' && cur.text.length <= 200) || numberedHeading ? 'h' : 'p', text: cur.text });
+    }
     cur = null;
   };
   for (const l of lines) {
@@ -279,6 +293,8 @@ export async function extractPdf(buf: Buffer, opts: { url?: string; name?: strin
     author,
     siteName,
     description: paper?.abstract ?? null,
+    // From the paragraphs, so the "Page N" markers and headings of the HTML do not end up in the excerpt.
+    excerpt: paper?.abstract || !hasText ? undefined : pdfExcerptText(blocks),
     publishedAt: toDate(info.CreationDate ?? info.ModDate ?? null),
     canonicalUrl: opts.url ?? null,
     paper: paper && opts.url ? { ...paper, pdfUrl: opts.url } : paper,

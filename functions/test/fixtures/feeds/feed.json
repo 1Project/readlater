@@ -1,0 +1,24 @@
+{
+  "version": "https://jsonfeed.org/version/1.1",
+  "title": "JSON Example",
+  "home_page_url": "https://json.example.com/",
+  "feed_url": "https://json.example.com/feed.json",
+  "authors": [{ "name": "Feed Person" }],
+  "items": [
+    {
+      "id": "2",
+      "url": "https://json.example.com/2",
+      "title": "HTML item",
+      "content_html": "<p>Hello <b>JSON</b></p>",
+      "date_published": "2026-10-02T10:00:00Z",
+      "image": "/images/2.png",
+      "authors": [{ "name": "Item Person" }]
+    },
+    {
+      "id": "1",
+      "url": "https://json.example.com/1",
+      "content_text": "A microblog post without a title.\n\nSecond paragraph.",
+      "date_published": "2026-10-01T10:00:00Z"
+    }
+  ]
+}

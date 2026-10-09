@@ -1,0 +1,614 @@
+/* Settings, Feeds and Highlights pages. Variables only (no colour literals) so the e-ink theme stays
+   pure black on white. Refinements of primitives use more specific selectors (load order is not fixed). */
+
+.set-title {
+  font-size: 1.5rem;
+  margin: 8px 0 12px;
+}
+
+/* ---------- In-page index ---------- */
+
+.set-index ul {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.chip.set-index-link {
+  min-height: 36px;
+  padding: 4px 12px;
+  font-size: 0.9rem;
+}
+:root[data-theme='eink'] .chip.set-index-link {
+  min-height: 44px;
+  border-width: 2px;
+  font-size: 1rem;
+}
+
+/* ---------- Sections ---------- */
+
+.set-section {
+  padding: 24px 0 8px;
+  border-top: 1px solid var(--border);
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  scroll-margin-top: 8px;
+}
+:root[data-theme='eink'] .set-section {
+  border-top-width: 2px;
+}
+.set-section-title {
+  font-size: 1.25rem;
+  margin: 0;
+  outline: none;
+}
+.set-intro {
+  margin: -8px 0 0;
+}
+.set-sub {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.set-sub p {
+  margin: 0;
+}
+.set-sub-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 8px 0 0;
+}
+.set-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.set-label {
+  font-weight: 600;
+  display: block;
+}
+.set-note {
+  margin: 0;
+}
+.set-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.set-wrap {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* ---------- Segmented buttons ---------- */
+
+.set-seg {
+  display: grid;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
+  gap: 6px;
+}
+.btn.set-seg-btn {
+  min-width: 0;
+  padding: 0 8px;
+  white-space: normal;
+  line-height: 1.2;
+}
+.set-seg-big .btn.set-seg-btn {
+  min-height: 52px;
+  font-size: 1rem;
+  font-weight: 600;
+}
+@media (max-width: 420px) {
+  .set-seg-big {
+    grid-auto-flow: row;
+    grid-template-columns: 1fr 1fr;
+  }
+}
+:root[data-theme='eink'] .btn.set-seg-btn {
+  border-width: 2px;
+}
+
+/* ---------- Switch ---------- */
+
+.set-switch-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.set-switch-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.btn.set-switch {
+  flex: none;
+  min-width: 92px;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 0 10px;
+}
+.set-switch-knob {
+  width: 30px;
+  height: 18px;
+  border-radius: 999px;
+  border: 2px solid currentColor;
+  position: relative;
+  flex: none;
+}
+.set-switch-knob::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.btn.set-switch.on {
+  background: var(--fg);
+  color: var(--bg);
+  border-color: var(--fg);
+}
+.btn.set-switch.on .set-switch-knob::after {
+  left: auto;
+  right: 2px;
+}
+.set-switch-state {
+  font-weight: 600;
+}
+:root[data-theme='eink'] .btn.set-switch {
+  border-width: 2px;
+}
+
+/* ---------- Reader typography ---------- */
+
+.set-stepper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.btn.set-step-btn {
+  font-size: 1.4rem;
+  font-weight: 600;
+  line-height: 1;
+}
+.set-range {
+  flex: 1;
+  min-width: 0;
+  height: var(--tap);
+  accent-color: var(--fg);
+}
+.set-preview {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  overflow: hidden;
+}
+.set-preview p {
+  margin: 0;
+}
+:root[data-theme='eink'] .set-preview {
+  border-width: 2px;
+}
+
+/* ---------- Lists (categories, tags, keys) ---------- */
+
+.set-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--border);
+}
+.set-list-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.set-list-main {
+  flex: 1 1 180px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.set-list-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+a.set-list-name:hover {
+  text-decoration: underline;
+}
+.set-list-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  margin-left: auto;
+}
+.set-rename {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.set-rename .input {
+  flex: 1 1 200px;
+  width: auto;
+}
+.set-inline-form {
+  display: flex;
+  gap: 8px;
+}
+.set-inline-form .input {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+}
+.set-inline-form .btn {
+  flex: none;
+}
+.input.set-filter {
+  max-width: 320px;
+}
+
+/* ---------- Link a device ---------- */
+
+.set-steps {
+  margin: 0;
+  padding-left: 1.4em;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.set-steps ul {
+  margin: 6px 0 0;
+  padding-left: 1.2em;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.set-code-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+  border: 2px solid var(--fg);
+  border-radius: var(--radius);
+  text-align: center;
+}
+.set-code-box p {
+  margin: 0;
+}
+.set-code {
+  font-family: var(--font-mono);
+  font-size: clamp(2rem, 11vw, 3.25rem);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+.set-qr {
+  width: 220px;
+  height: 220px;
+  image-rendering: pixelated;
+  border: 1px solid var(--border);
+}
+:root[data-theme='eink'] .set-qr {
+  filter: none;
+}
+.set-expired {
+  margin: 0;
+  font-weight: 600;
+}
+
+/* ---------- Saving: keys, code ---------- */
+
+.set-key-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 2px solid var(--fg);
+  border-radius: var(--radius);
+}
+.set-key-box p {
+  margin: 0;
+}
+.set-key {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.set-pre {
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.set-bookmarklet.btn {
+  cursor: grab;
+}
+.set-section code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+/* ---------- Import / export / account ---------- */
+
+.set-formats {
+  margin: 0;
+  padding-left: 1.2em;
+}
+.set-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.set-progress p {
+  margin: 0;
+}
+:root[data-theme='eink'] .set-progress {
+  border-width: 2px;
+}
+.set-errors {
+  margin: 0;
+  padding-left: 1.2em;
+  overflow-wrap: anywhere;
+}
+.set-export {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+}
+.set-export-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.set-export-row > div {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.set-export-row .btn {
+  flex: none;
+}
+.set-account {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.set-account p {
+  margin: 0;
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.set-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: var(--tap);
+  padding: 8px 0;
+  cursor: pointer;
+}
+.set-check input {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  flex: none;
+  accent-color: var(--fg);
+}
+
+/* ---------- Feeds page ---------- */
+
+.feeds-heading {
+  margin: 0;
+}
+.card.feeds-add {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+.feeds-add p {
+  margin: 0;
+}
+.feeds-add-options {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+@media (max-width: 560px) {
+  .feeds-add-options {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+:root[data-theme='eink'] .card.feeds-add {
+  border-width: 2px;
+}
+.feeds-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 20px 0 8px;
+}
+.feeds-count {
+  margin: 0 0 4px;
+}
+.feeds-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--border);
+}
+.feeds-row {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+:root[data-theme='eink'] .feeds-list,
+:root[data-theme='eink'] .feeds-row {
+  border-width: 2px;
+}
+.feeds-row-main {
+  flex: 1 1 220px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.feeds-title {
+  font-weight: 600;
+  font-size: 1.05rem;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.feeds-title:hover {
+  text-decoration: underline;
+}
+.feeds-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+.feeds-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.feeds-chips .chip {
+  cursor: default;
+}
+.feeds-error {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.link-like {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+  text-align: start;
+}
+
+/* ---------- Highlights page ---------- */
+
+.input.hls-filter {
+  margin: 4px 0 8px;
+}
+.hls-group {
+  padding: 16px 0 8px;
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+}
+:root[data-theme='eink'] .hls-group {
+  border-top-width: 2px;
+}
+.hls-title {
+  font-size: 1.1rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.hls-title a {
+  text-decoration: none;
+}
+.hls-title a:hover {
+  text-decoration: underline;
+}
+.hls-source {
+  margin: 2px 0 0;
+}
+.hls-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.hls-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hls-quote {
+  margin: 0;
+  padding: 2px 0 2px 14px;
+  border-left: 3px solid var(--accent);
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+:root[data-theme='eink'] .hls-quote {
+  border-left: 4px solid var(--fg);
+}
+.hls-note {
+  margin: 0 0 0 17px;
+  padding: 6px 10px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+:root[data-theme='eink'] .hls-note {
+  border: 1px solid var(--fg);
+}
+.hls-note-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-left: 17px;
+}
+.hls-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 17px;
+}

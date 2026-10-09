@@ -80,6 +80,8 @@ export interface Draft {
   author?: string | null;
   siteName?: string | null;
   description?: string | null;
+  /** Explicit excerpt source; when set (even to null) it replaces the description/text heuristic. */
+  excerpt?: string | null;
   imageUrl?: string | null;
   publishedAt?: Date | string | number | null;
   canonicalUrl?: string | null;
@@ -99,7 +101,7 @@ function clean(s: string | null | undefined, max = 500): string | null {
 export function finalize(d: Draft): Extracted {
   const text = d.text ?? htmlToText(d.html);
   const desc = collapseWs(d.description);
-  const excerpt = makeExcerpt(desc.length >= 30 ? desc : text || desc);
+  const excerpt = makeExcerpt(d.excerpt !== undefined ? d.excerpt ?? '' : desc.length >= 30 ? desc : text || desc);
   const imageUrl = d.imageUrl && /^https?:\/\//i.test(d.imageUrl) ? d.imageUrl : null;
   return {
     type: d.type,

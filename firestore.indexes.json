@@ -1,0 +1,53 @@
+{
+  "indexes": [],
+  "fieldOverrides": [
+    {
+      "collectionGroup": "content",
+      "fieldPath": "html",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "items",
+      "fieldPath": "note",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "items",
+      "fieldPath": "excerpt",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "items",
+      "fieldPath": "paper",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "highlights",
+      "fieldPath": "text",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "highlights",
+      "fieldPath": "note",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "highlights",
+      "fieldPath": "prefix",
+      "ttl": false,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "highlights",
+      "fieldPath": "suffix",
+      "ttl": false,
+      "indexes": []
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head><title>My subscriptions</title></head>
+  <body>
+    <outline text="Tech" title="Tech">
+      <outline type="rss" text="Hacker News" title="Hacker News" xmlUrl="https://hnrss.org/frontpage" htmlUrl="https://news.ycombinator.com/"/>
+      <outline text="Nested">
+        <outline type="rss" text="Deep &amp; Nested" xmlurl="https://deep.example.com/feed.xml"/>
+      </outline>
+    </outline>
+    <outline type="rss" title="Top level" XMLURL="https://top.example.com/rss" HTMLURL="https://top.example.com"/>
+    <outline type="rss" text="Duplicate HN" xmlUrl="https://hnrss.org/frontpage"/>
+    <outline text="Not a feed" htmlUrl="https://example.com"/>
+    <outline text="Bad scheme" xmlUrl="javascript:alert(1)"/>
+  </body>
+</opml>

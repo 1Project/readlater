@@ -82,7 +82,7 @@ export function buildVideo(ref: VideoRef, o: OEmbed, page: { description: string
     title,
     author: o.author_name ?? null,
     siteName: provider,
-    description: desc,
+    excerpt: desc,
     imageUrl: thumb,
     publishedAt: page.publishedAt ?? toDate(o.upload_date ?? null),
     canonicalUrl: ref.url,

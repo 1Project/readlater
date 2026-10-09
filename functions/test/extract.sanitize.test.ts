@@ -61,6 +61,19 @@ describe('sanitizeHtml', () => {
     );
   });
 
+  it('unwraps same-page anchors and turns image <object>s into <img>', () => {
+    const out = sanitizeHtml(
+      '<p><a href="https://example.com/post#sec-2">Section 2</a> <a href="/other#x">other</a></p>' +
+        '<figure><object type="image/svg+xml" data="fig1.svg"></object><figcaption>Fig</figcaption></figure>' +
+        '<object data="https://evil.example/app.swf" type="application/x-shockwave-flash"><p>fallback</p></object>',
+      'https://example.com/post',
+    );
+    expect(out).toBe(
+      '<p>Section 2 <a href="https://example.com/other#x">other</a></p>' +
+        '<figure><img src="https://example.com/fig1.svg" alt=""><figcaption>Fig</figcaption></figure>',
+    );
+  });
+
   it('returns empty string for empty input', () => {
     expect(sanitizeHtml('')).toBe('');
     expect(sanitizeHtml('<p> </p>')).toBe('');

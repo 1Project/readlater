@@ -80,6 +80,18 @@ describe('extractFromHtml', () => {
     expect(r.paper?.pdfUrl).toBe('https://arxiv.org/pdf/hep-th/9901001');
   });
 
+  it('keeps <font>-wrapped footnote markers inside <br>-separated paragraphs', () => {
+    const para = (n: number) =>
+      `Paragraph ${n} talks about the work you choose and how to find something you have a natural aptitude for and a deep interest in, at some length so it counts as prose.`;
+    const html = `<html><head><title>Essay</title></head><body><table><tr><td><font size="2" face="verdana">
+      ${para(1)}<br><br>${para(2)}
+      <font color="#999999">[<a href="#f1n"><font color="#dddddd">1</font></a>]</font><br><br>${para(3)}<br><br>${para(4)}
+      </font></td></tr></table></body></html>`;
+    const r = extractFromHtml(html, 'https://essays.example/essay.html');
+    expect(r.html).not.toContain('<font');
+    expect(r.html).toMatch(/Paragraph 2[^<]*\[(<[^>]+>)*1(<\/[^>]+>)*\]\s*<\/p>/);
+  });
+
   it('detects meta refresh redirects only on empty pages', () => {
     expect(metaRefreshTarget('<meta http-equiv="refresh" content="0; url=/next">', 'https://a.com/x')).toBe('https://a.com/next');
     expect(metaRefreshTarget('<meta http-equiv="refresh" content="30">', 'https://a.com/x')).toBeNull();

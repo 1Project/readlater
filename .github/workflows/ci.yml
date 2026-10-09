@@ -1,0 +1,201 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (functions + web)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            functions/package-lock.json
+            web/package-lock.json
+
+      - name: Install functions dependencies
+        run: npm ci
+        working-directory: functions
+
+      - name: Install web dependencies
+        run: npm ci
+        working-directory: web
+
+      - name: Install e2e dependencies
+        if: hashFiles('e2e/package.json') != ''
+        run: if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi
+        working-directory: e2e
+
+      - name: Functions typecheck
+        run: npm run typecheck
+        working-directory: functions
+
+      - name: Functions tests
+        run: npm test
+        working-directory: functions
+
+      - name: Web typecheck
+        run: npm run typecheck
+        working-directory: web
+
+      - name: Web tests
+        run: npm test
+        working-directory: web
+
+      - name: Web build
+        run: npm run build
+        working-directory: web
+
+  e2e:
+    name: End-to-end (emulators)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for e2e tests
+        id: e2e
+        run: if [ -f e2e/package.json ]; then echo "present=true" >> "$GITHUB_OUTPUT"; else echo "No e2e/package.json, skipping."; fi
+
+      - uses: actions/setup-node@v4
+        if: steps.e2e.outputs.present == 'true'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
+            web/package-lock.json
+
+      - uses: actions/setup-java@v4
+        if: steps.e2e.outputs.present == 'true'
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install dependencies
+        if: steps.e2e.outputs.present == 'true'
+        run: |
+          npm ci
+          npm --prefix functions ci
+          npm --prefix web ci
+          if [ -f e2e/package-lock.json ]; then npm --prefix e2e ci; else npm --prefix e2e install --no-audit --no-fund; fi
+
+      - name: Install Playwright browser
+        if: steps.e2e.outputs.present == 'true'
+        run: npx playwright install --with-deps chromium
+        working-directory: e2e
+
+      - name: Run end-to-end tests
+        if: steps.e2e.outputs.present == 'true'
+        run: npm test
+        working-directory: e2e
+
+      - name: Upload Playwright report
+        if: failure() && steps.e2e.outputs.present == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          if-no-files-found: ignore
+
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      VITE_FIREBASE_CONFIG: ${{ vars.VITE_FIREBASE_CONFIG }}
+      VITE_PUBLIC_URL: ${{ vars.VITE_PUBLIC_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Install web dependencies
+        run: npm ci
+        working-directory: web
+
+      - name: Build web app
+        run: npm run build
+        working-directory: web
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+        working-directory: web
+
+      - name: Build debug APK and run unit tests
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug testDebugUnitTest
+          cp app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/readlater-debug.apk"
+        working-directory: web/android
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: readlater-debug.apk
+          path: ${{ runner.temp }}/readlater-debug.apk
+          if-no-files-found: error
+
+  ios:
+    name: iOS simulator build
+    runs-on: macos-latest
+    timeout-minutes: 40
+    env:
+      VITE_FIREBASE_CONFIG: ${{ vars.VITE_FIREBASE_CONFIG }}
+      VITE_PUBLIC_URL: ${{ vars.VITE_PUBLIC_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web dependencies
+        run: npm ci
+        working-directory: web
+
+      - name: Build web app
+        run: npm run build
+        working-directory: web
+
+      - name: Sync Capacitor
+        run: npx cap sync ios
+        working-directory: web
+
+      - name: Build for the iOS Simulator
+        run: |
+          xcodebuild -project App/App.xcodeproj -scheme App -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO build
+        working-directory: web/ios

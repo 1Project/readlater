@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive icon foreground: the Readlater bookmark (same glyph as web/public/icon.svg), black. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.1447"
+        android:scaleY="0.1447"
+        android:translateX="16.95"
+        android:translateY="15.8">
+        <path
+            android:fillColor="#000000"
+            android:pathData="M168,112h176a16,16 0,0 1,16 16v288l-104,-64 -104,64V128a16,16 0,0 1,16 -16z" />
+    </group>
+</vector>

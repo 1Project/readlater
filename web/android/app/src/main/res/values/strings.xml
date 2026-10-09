@@ -1,0 +1,8 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Readlater</string>
+    <string name="title_activity_main">Readlater</string>
+    <string name="share_label">Save to Readlater</string>
+    <string name="package_name">app.readlater.reader</string>
+    <string name="custom_url_scheme">readlater</string>
+</resources>

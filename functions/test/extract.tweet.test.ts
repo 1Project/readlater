@@ -60,6 +60,7 @@ describe('buildTweet', () => {
     expect(r.html).toContain('<aside><p><strong>Community note</strong></p><p>Context: see <a href="https://example.org/context">https://example.org/context</a></p></aside>');
     expect(r.imageUrl).toBe('https://pbs.twimg.com/media/PHOTO1.jpg?name=orig');
     expect(r.html).not.toContain('pic999');
+    expect(r.excerpt).toBe('Hey @jack, read this: example.com/article #reading Second paragraph & <more>');
   });
 
   it('renders an X long-form article', () => {

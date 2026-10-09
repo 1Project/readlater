@@ -34,6 +34,44 @@ export interface TagInputProps {
 const MAX_TAGS = 30;
 const MAX_SUGGESTIONS = 8;
 
+/*
+ * Hiding the suggestion row on blur shifts everything below it up. When the blur comes from pressing a
+ * button further down (e.g. a dialog's Save), the button moves away between mousedown and mouseup and the
+ * click is lost. So while a pointer press is in progress, hiding waits until its click has been handled.
+ */
+let pressing = false;
+let releaseTimer = 0;
+const afterPress: (() => void)[] = [];
+
+function release() {
+  window.clearTimeout(releaseTimer);
+  // Run after the click handlers of this press.
+  window.setTimeout(() => {
+    pressing = false;
+    afterPress.splice(0).forEach((f) => f());
+  }, 0);
+}
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('pointerdown', () => {
+    window.clearTimeout(releaseTimer);
+    pressing = true;
+  }, true);
+  // Touch: compatibility mouse events and the click follow pointerup, so wait for the click (or give up).
+  const up = () => {
+    window.clearTimeout(releaseTimer);
+    releaseTimer = window.setTimeout(release, 600);
+  };
+  document.addEventListener('pointerup', up, true);
+  document.addEventListener('pointercancel', up, true);
+  document.addEventListener('click', release, true);
+}
+
+function whenPressEnds(f: () => void) {
+  if (pressing) afterPress.push(f);
+  else f();
+}
+
 export function TagInput({ value, onChange, suggestions, placeholder = 'Add tags…', id, autoFocus, 'aria-label': ariaLabel = 'Tags' }: TagInputProps) {
   const [text, setText] = useState('');
   const [focused, setFocused] = useState(false);
@@ -162,8 +200,8 @@ export function TagInput({ value, onChange, suggestions, placeholder = 'Add tags
           onKeyDown={onKeyDown}
           onFocus={() => setFocused(true)}
           onBlur={() => {
-            setFocused(false);
             commitText();
+            whenPressEnds(() => setFocused(inputRef.current === document.activeElement));
           }}
         />
       </div>

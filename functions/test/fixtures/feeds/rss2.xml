@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"
+  xmlns:content="http://purl.org/rss/1.0/modules/content/"
+  xmlns:dc="http://purl.org/dc/elements/1.1/"
+  xmlns:media="http://search.yahoo.com/mrss/"
+  xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Example &amp; Co Blog</title>
+    <link>https://blog.example.com/</link>
+    <atom:link href="https://blog.example.com/feed" rel="self" type="application/rss+xml"/>
+    <description>Notes on &lt;things&gt;</description>
+    <item>
+      <title><![CDATA[Café “quotes” & <b>bold</b> title]]></title>
+      <link>https://blog.example.com/posts/cafe?utm_source=rss&amp;id=7</link>
+      <guid isPermaLink="false">post-7</guid>
+      <dc:creator><![CDATA[Ada Lovelace]]></dc:creator>
+      <pubDate>Tue, 06 Oct 2026 09:30:00 +0000</pubDate>
+      <description>Short teaser that should be ignored</description>
+      <content:encoded><![CDATA[<p>Full <em>content</em> with a <a href="/rel/link">relative link</a>.</p><img src="/img/hero.png" alt="hero"><script>alert(1)</script>]]></content:encoded>
+      <media:content url="https://cdn.example.com/media/cafe.jpg" medium="image" width="800"/>
+    </item>
+    <item>
+      <title>Escaped HTML description &amp;amp; entities</title>
+      <link>https://blog.example.com/posts/escaped</link>
+      <guid>https://blog.example.com/posts/escaped</guid>
+      <author>editor@example.com (Grace Hopper)</author>
+      <pubDate>Mon, 05 Oct 2026 08:00:00 GMT</pubDate>
+      <description>&lt;p&gt;Hello &amp;amp; welcome &amp;mdash; &lt;strong&gt;friends&lt;/strong&gt;&lt;/p&gt;</description>
+      <enclosure url="https://cdn.example.com/media/escaped.png" type="image/png" length="1234"/>
+    </item>
+    <item>
+      <title>Permalink guid only</title>
+      <guid>https://blog.example.com/posts/guid-only</guid>
+      <description>Plain text body
+with a newline</description>
+    </item>
+  </channel>
+</rss>

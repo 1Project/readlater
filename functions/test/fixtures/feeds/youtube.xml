@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns:media="http://search.yahoo.com/mrss/" xmlns="http://www.w3.org/2005/Atom">
+ <link rel="self" href="http://www.youtube.com/feeds/videos.xml?channel_id=UCHnyfMqiRRG1u-2MsSQLbXA"/>
+ <id>yt:channel:HnyfMqiRRG1u-2MsSQLbXA</id>
+ <yt:channelId>HnyfMqiRRG1u-2MsSQLbXA</yt:channelId>
+ <title>Veritasium</title>
+ <link rel="alternate" href="https://www.youtube.com/channel/UCHnyfMqiRRG1u-2MsSQLbXA"/>
+ <author><name>Veritasium</name><uri>https://www.youtube.com/channel/UCHnyfMqiRRG1u-2MsSQLbXA</uri></author>
+ <published>2010-07-21T07:18:02+00:00</published>
+ <entry>
+  <id>yt:video:ONAuUyml0yI</id>
+  <yt:videoId>ONAuUyml0yI</yt:videoId>
+  <title>We're trying something new...</title>
+  <link rel="alternate" href="https://www.youtube.com/watch?v=ONAuUyml0yI"/>
+  <author><name>Veritasium</name></author>
+  <published>2026-09-30T19:19:10+00:00</published>
+  <updated>2026-10-01T02:00:00+00:00</updated>
+  <media:group>
+   <media:title>We're trying something new...</media:title>
+   <media:content url="https://www.youtube.com/v/ONAuUyml0yI?version=3" type="application/x-shockwave-flash" width="640" height="390"/>
+   <media:thumbnail url="https://i4.ytimg.com/vi/ONAuUyml0yI/hqdefault.jpg" width="480" height="360"/>
+   <media:description>Our mission is to get to the truth.
+
+Watch more at https://example.com/more</media:description>
+  </media:group>
+ </entry>
+</feed>

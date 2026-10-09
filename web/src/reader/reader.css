@@ -1,0 +1,742 @@
+/* Reader styles. Only CSS variables (see styles.css) — no colour literals — so the e-ink theme
+   stays pure black on white. Typography comes from variables set on .reader by Reader.tsx:
+   --reader-font --reader-size --reader-lh --reader-width --reader-align. */
+
+.reader {
+  --reader-gutter: 16px;
+  --toolbar-h: calc(var(--tap) + 9px);
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+/* ---------- Toolbar ---------- */
+
+.reader-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: var(--toolbar-h);
+  padding: 4px max(4px, env(safe-area-inset-right)) 4px max(4px, env(safe-area-inset-left));
+  padding-top: max(4px, env(safe-area-inset-top));
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.reader-toolbar[hidden] {
+  display: none;
+}
+.reader-toolbar-overlay {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+}
+:root[data-theme='eink'] .reader-toolbar {
+  border-bottom: 2px solid var(--fg);
+}
+.reader-toolbar-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 6px;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+.reader-toolbar > .spacer {
+  flex: 0 1 0;
+}
+@media (max-width: 559px) {
+  .reader-toolbar-title {
+    visibility: hidden;
+    padding: 0;
+  }
+}
+.reader-hl-button {
+  position: relative;
+}
+.reader-badge {
+  position: absolute;
+  top: 2px;
+  right: 1px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--fg);
+  color: var(--bg);
+  font-size: 11px;
+  line-height: 17px;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* ---------- Shared bits ---------- */
+
+.reader-main {
+  display: block;
+}
+.reader-page {
+  max-width: var(--page-width);
+  margin: 0 auto;
+  padding: 16px var(--reader-gutter) 64px;
+}
+.reader-page-wide {
+  max-width: 1100px;
+}
+.reader-state > p {
+  margin: 12px 0;
+}
+.reader-state .row {
+  margin-top: 12px;
+}
+.reader-banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+}
+.segmented {
+  display: inline-flex;
+  flex-wrap: wrap;
+}
+.segmented > .btn {
+  border-radius: 0;
+  margin-left: -1px;
+}
+.segmented > .btn:first-child {
+  margin-left: 0;
+  border-top-left-radius: var(--radius);
+  border-bottom-left-radius: var(--radius);
+}
+.segmented > .btn:last-child {
+  border-top-right-radius: var(--radius);
+  border-bottom-right-radius: var(--radius);
+}
+.reader-view-toggle {
+  margin-top: 14px;
+  font-family: var(--font-ui);
+}
+
+/* ---------- Article (both modes) ---------- */
+
+.article {
+  font-family: var(--reader-font);
+  font-size: var(--reader-size);
+  line-height: var(--reader-lh);
+}
+.article-clip {
+  width: min(100%, var(--reader-width));
+  margin: 0 auto;
+}
+.article-scroll .article-clip {
+  width: auto;
+  max-width: calc(var(--reader-width) + 2 * var(--reader-gutter));
+  padding: 8px var(--reader-gutter) 96px;
+}
+
+.article-header {
+  font-family: var(--font-ui);
+  font-size: 1rem;
+  line-height: 1.45;
+  margin: 12px 0 28px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+  break-inside: avoid;
+}
+.article-header-compact {
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+}
+.article-title {
+  font-family: var(--reader-font);
+  font-size: calc(var(--reader-size) * 1.55);
+  line-height: 1.2;
+  margin: 0 0 10px;
+  overflow-wrap: anywhere;
+}
+.article-authors {
+  margin: 0 0 4px;
+}
+.article-byline {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+.article-links,
+.article-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin-top: 8px;
+}
+.article-chips {
+  gap: 6px;
+}
+.article-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  color: var(--fg);
+  font-size: 0.92rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.article-link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.chip.article-chip-add {
+  color: var(--muted);
+  border-style: dashed;
+}
+:root[data-theme='eink'] .chip.article-chip-add {
+  color: var(--fg);
+}
+.article-note {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  text-align: left;
+  font: inherit;
+  white-space: pre-wrap;
+  cursor: pointer;
+}
+.article-note-label {
+  font-weight: 700;
+  margin-right: 4px;
+}
+.article-footer {
+  margin: 40px 0 8px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+  font-family: var(--font-ui);
+  font-size: 1rem;
+  break-inside: avoid;
+}
+.article-footer p {
+  margin: 0 0 10px;
+}
+.article-end {
+  height: 0;
+}
+
+/* ---------- Content typography ---------- */
+
+.reader-content {
+  text-align: var(--reader-align);
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+.reader-content > :first-child {
+  margin-top: 0;
+}
+.reader-content p,
+.reader-content ul,
+.reader-content ol,
+.reader-content blockquote,
+.reader-content figure,
+.reader-content pre,
+.reader-content table,
+.reader-content details {
+  margin: 0 0 1em;
+}
+.reader-content h1,
+.reader-content h2,
+.reader-content h3,
+.reader-content h4,
+.reader-content h5,
+.reader-content h6 {
+  line-height: 1.25;
+  margin: 1.4em 0 0.5em;
+  text-align: left;
+  scroll-margin-top: calc(var(--toolbar-h) + 12px);
+  break-after: avoid;
+}
+.reader-content h1 {
+  font-size: 1.5em;
+}
+.reader-content h2 {
+  font-size: 1.3em;
+}
+.reader-content h3 {
+  font-size: 1.12em;
+}
+.reader-content h4,
+.reader-content h5,
+.reader-content h6 {
+  font-size: 1em;
+}
+.reader-content section[data-chapter] {
+  scroll-margin-top: calc(var(--toolbar-h) + 12px);
+}
+.reader-content a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--faint);
+  text-underline-offset: 2px;
+}
+:root[data-theme='eink'] .reader-content a {
+  text-decoration-color: var(--fg);
+}
+.reader-content img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+.reader-content figure {
+  margin-left: 0;
+  margin-right: 0;
+}
+.reader-content figcaption {
+  margin-top: 6px;
+  font-family: var(--font-ui);
+  font-size: 0.82em;
+  color: var(--muted);
+  text-align: center;
+}
+.reader-content blockquote {
+  margin-left: 0;
+  margin-right: 0;
+  padding-left: 1em;
+  border-left: 3px solid var(--border);
+}
+:root[data-theme='eink'] .reader-content blockquote {
+  border-left-color: var(--fg);
+}
+.reader-content pre {
+  padding: 12px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 0.85em;
+  line-height: 1.45;
+  text-align: left;
+}
+.reader-content code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+.reader-content pre code {
+  font-size: inherit;
+}
+.reader-content table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 0.9em;
+  text-align: left;
+}
+.reader-content th,
+.reader-content td {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  vertical-align: top;
+}
+.reader-content hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 2em 0;
+}
+.reader-content math {
+  font-size: 1.05em;
+}
+.reader-content summary {
+  cursor: pointer;
+  min-height: var(--tap);
+}
+.hide-images .reader-content img,
+.hide-images .reader-content picture {
+  display: none;
+}
+
+/* Highlights (the e-ink look — underlined bold — comes from styles.css). */
+.reader-content mark {
+  background: var(--mark);
+  color: var(--mark-fg);
+  border-radius: 2px;
+}
+.reader-content mark.hl {
+  cursor: pointer;
+}
+.reader-content mark.hl.has-note + mark.hl.has-note::after {
+  content: none;
+}
+.reader-content mark.hl.has-note::after {
+  content: '✎';
+  font-size: 0.7em;
+  vertical-align: super;
+  margin-left: 1px;
+  font-weight: 400;
+}
+
+/* ---------- Pages mode ---------- */
+
+html.reader-pages-active,
+html.reader-pages-active body {
+  overflow: hidden;
+  height: 100%;
+  overscroll-behavior: none;
+}
+.reader-pages {
+  position: fixed;
+  inset: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.reader-pages .reader-main {
+  position: absolute;
+  inset: 0;
+}
+.article-pages {
+  position: absolute;
+  inset: 0;
+  /* The top band is reserved for the toolbar overlay (or the running head when it is hidden). */
+  padding: calc(var(--toolbar-h) + 10px + env(safe-area-inset-top)) var(--reader-gutter) calc(40px + env(safe-area-inset-bottom));
+  -webkit-user-select: text;
+  user-select: text;
+  touch-action: manipulation;
+}
+.article-pages .article-clip {
+  height: 100%;
+  overflow: hidden;
+  overflow: clip;
+}
+.article-pages .article-flow {
+  column-fill: auto;
+  /* height / column-width / column-gap / transform are set by ArticleView */
+}
+.article-pages .article-header,
+.article-pages .article-footer {
+  margin-top: 0;
+}
+.article-pages .reader-content img {
+  max-height: var(--page-h, 80vh);
+  width: auto;
+  object-fit: contain;
+  break-inside: avoid;
+}
+.article-pages .reader-content figure {
+  break-inside: avoid;
+}
+.article-pages .reader-content pre {
+  white-space: pre-wrap;
+  overflow: hidden;
+}
+.running-head {
+  position: fixed;
+  top: env(safe-area-inset-top);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  height: var(--toolbar-h);
+  padding: 0 calc(var(--reader-gutter) + 8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  color: var(--muted);
+  pointer-events: none;
+}
+.running-head > span {
+  max-width: min(100%, 60ch);
+}
+:root[data-theme='eink'] .running-head {
+  color: var(--fg);
+}
+.page-indicator {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: max(8px, env(safe-area-inset-bottom));
+  text-align: center;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  color: var(--muted);
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+:root[data-theme='eink'] .page-indicator {
+  color: var(--fg);
+}
+
+/* ---------- Selection bar ---------- */
+
+.selection-bar {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 2px);
+  background: var(--bg);
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--fg) 18%, transparent);
+  font-family: var(--font-ui);
+}
+.selection-bar .btn {
+  min-height: var(--tap);
+}
+.selection-bar-float {
+  max-width: calc(100vw - 16px);
+}
+.selection-bar-bottom {
+  left: 8px;
+  right: 8px;
+  bottom: calc(44px + env(safe-area-inset-bottom));
+  justify-content: center;
+}
+.selection-bar-bottom .btn {
+  flex: 1 1 0;
+  max-width: 240px;
+}
+:root[data-theme='eink'] .selection-bar {
+  border: 2px solid var(--fg);
+}
+
+/* ---------- Typography panel ---------- */
+
+.typo-panel {
+  position: fixed;
+  z-index: 45;
+  top: calc(var(--toolbar-h) + 6px + env(safe-area-inset-top));
+  right: 8px;
+  width: min(360px, calc(100vw - 16px));
+  max-height: calc(100vh - var(--toolbar-h) - 24px);
+  overflow-y: auto;
+  padding: 8px 14px 14px;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 4px);
+  background: var(--bg);
+  color: var(--fg);
+  box-shadow: 0 12px 40px color-mix(in srgb, var(--fg) 18%, transparent);
+  font-family: var(--font-ui);
+  font-size: 0.95rem;
+}
+:root[data-theme='eink'] .typo-panel {
+  border: 2px solid var(--fg);
+}
+.typo-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.typo-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+.typo-label {
+  color: var(--muted);
+  min-width: 72px;
+}
+:root[data-theme='eink'] .typo-label {
+  color: var(--fg);
+}
+.typo-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.typo-stepper .btn {
+  font-size: 1.2rem;
+}
+.typo-value {
+  min-width: 52px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.typo-row .segmented .btn {
+  padding: 0 10px;
+}
+
+/* ---------- Dialog contents ---------- */
+
+.reader-hl-list,
+.reader-toc {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.reader-hl-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+.reader-hl-entry:first-child {
+  border-top: 0;
+}
+.reader-hl-jump {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.reader-hl-jump:disabled {
+  cursor: default;
+}
+.reader-hl-text {
+  font-family: var(--font-serif);
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  border-left: 3px solid var(--mark);
+  padding-left: 8px;
+}
+:root[data-theme='eink'] .reader-hl-text {
+  border-left-color: var(--fg);
+}
+.reader-hl-note {
+  font-size: 0.9rem;
+  color: var(--muted);
+  white-space: pre-wrap;
+  padding-left: 11px;
+}
+:root[data-theme='eink'] .reader-hl-note {
+  color: var(--fg);
+  font-style: italic;
+}
+.reader-toc li {
+  border-top: 1px solid var(--border);
+}
+.reader-toc li:first-child {
+  border-top: 0;
+}
+.reader-toc-link {
+  display: block;
+  width: 100%;
+  min-height: var(--tap);
+  padding: 8px 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.reader-toc-link:hover {
+  text-decoration: underline;
+}
+.reader-quote {
+  margin: 0;
+  padding-left: 12px;
+  border-left: 3px solid var(--mark);
+  font-family: var(--font-serif);
+  max-height: 30vh;
+  overflow: auto;
+}
+:root[data-theme='eink'] .reader-quote {
+  border-left-color: var(--fg);
+}
+
+/* ---------- PDF ---------- */
+
+.pdf-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+}
+.pdf-nav,
+.pdf-zoom,
+.pdf-page-form {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.pdf-zoom {
+  gap: 0;
+}
+.pdf-zoom > .btn {
+  border-radius: 0;
+  margin-left: -1px;
+}
+.pdf-zoom > .btn:first-child {
+  margin-left: 0;
+  border-radius: var(--radius) 0 0 var(--radius);
+}
+.pdf-zoom > .btn:last-child {
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+.btn.pdf-zoom-value {
+  min-width: 60px;
+  padding: 0 6px;
+  font-variant-numeric: tabular-nums;
+}
+.input.pdf-page-input {
+  width: 60px;
+  padding-left: 6px;
+  padding-right: 6px;
+  text-align: center;
+}
+.pdf-page-label {
+  min-width: 72px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.pdf-stage {
+  position: relative;
+  min-height: 200px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  -webkit-user-select: none;
+  user-select: none;
+}
+:root[data-theme='eink'] .pdf-stage {
+  background: var(--bg);
+  border: 2px solid var(--fg);
+}
+.pdf-canvas {
+  display: block;
+  margin: 0 auto;
+}
+.pdf-canvas[hidden] {
+  display: none;
+}
+.pdf-rendering {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 2px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.pdf-bottom {
+  display: flex;
+  justify-content: center;
+  margin-top: 12px;
+}

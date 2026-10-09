@@ -201,7 +201,19 @@ export function sanitizeHtml(html: string, baseUrl?: string): string {
   tpl.innerHTML = html;
   const frag = tpl.content;
   fixLazyImages(frag);
+  // <object type="image/svg+xml" data="…"> (e.g. arXiv figures) → <img>.
+  for (const obj of Array.from(frag.querySelectorAll('object[data]'))) {
+    const type = (obj.getAttribute('type') ?? '').toLowerCase();
+    const data = obj.getAttribute('data') ?? '';
+    if (type.startsWith('image/') || /\.(svg|png|jpe?g|gif|webp)(\?|$)/i.test(data)) {
+      const img = doc.createElement('img');
+      img.setAttribute('src', data);
+      img.setAttribute('alt', obj.getAttribute('aria-label') ?? obj.getAttribute('title') ?? '');
+      obj.replaceWith(img);
+    }
+  }
   for (const el of Array.from(frag.querySelectorAll(DROP_WITH_CONTENT.join(',')))) el.remove();
+  const pageUrl = baseUrl ? baseUrl.split('#')[0] : null;
   // Resolve URLs before DOMPurify drops data-* attributes.
   for (const a of Array.from(frag.querySelectorAll('a'))) {
     const raw = (a.getAttribute('href') ?? '').trim();
@@ -210,7 +222,8 @@ export function sanitizeHtml(html: string, baseUrl?: string): string {
       continue;
     }
     const abs = absolutize(raw, baseUrl);
-    if (abs) a.setAttribute('href', abs);
+    // Links to an anchor on the same page can't work once ids are stripped.
+    if (abs && !(pageUrl && abs.includes('#') && abs.split('#')[0] === pageUrl)) a.setAttribute('href', abs);
     else a.removeAttribute('href');
   }
   for (const img of Array.from(frag.querySelectorAll('img'))) {

@@ -1,0 +1,262 @@
+rules_version = '2';
+
+// Readlater Firestore security rules. Data model: docs/SPEC.md.
+//
+// - Deny by default. Everything lives under users/{uid}; only that user can read it.
+// - Cloud Functions use the Admin SDK and bypass these rules, so server-owned
+//   fields (contentChunks, fetchError, paper, ...) and collections (content,
+//   search, apiKeys, top-level loginCodes/apiKeys/rateLimits) are not client-writable.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    // ---- small type helpers ------------------------------------------------
+
+    function isStr(v, max) {
+      return v is string && v.size() <= max;
+    }
+
+    function isNonEmptyStr(v, max) {
+      return v is string && v.size() > 0 && v.size() <= max;
+    }
+
+    function isNullOrStr(v, max) {
+      return v == null || isStr(v, max);
+    }
+
+    function isNullOrTimestamp(v) {
+      return v == null || v is timestamp;
+    }
+
+    function isNullOrCount(v) {
+      return v == null || (v is number && v >= 0);
+    }
+
+    function isId(v) {
+      return isNonEmptyStr(v, 128) && !v.matches('.*/.*');
+    }
+
+    function isNullOrId(v) {
+      return v == null || isId(v);
+    }
+
+    function isTags(v) {
+      return v is list && v.size() <= 30;
+    }
+
+    // ---- items ---------------------------------------------------------------
+
+    function itemFields() {
+      return ['url', 'type', 'location', 'status', 'favorite', 'title', 'titleLocked', 'author',
+        'siteName', 'excerpt', 'imageUrl', 'publishedAt', 'wordCount', 'readingMinutes',
+        'categoryId', 'tags', 'note', 'progress', 'fetchStatus', 'fetchError', 'contentChunks',
+        'file', 'feedId', 'paper', 'createdAt', 'updatedAt', 'lastOpenedAt', 'archivedAt'];
+    }
+
+    // Fields the client may change after creation (SPEC: everything except
+    // contentChunks, fetchError, file, paper; createdAt is immutable).
+    // fetchError and file are listed but further restricted in validItemUpdate.
+    function itemClientFields() {
+      return ['url', 'type', 'location', 'status', 'favorite', 'title', 'titleLocked', 'author',
+        'siteName', 'excerpt', 'imageUrl', 'publishedAt', 'wordCount', 'readingMinutes',
+        'categoryId', 'tags', 'note', 'progress', 'fetchStatus', 'feedId', 'updatedAt',
+        'lastOpenedAt', 'archivedAt', 'fetchError', 'file'];
+    }
+
+    function isItemType(v) {
+      return v in ['article', 'tweet', 'paper', 'pdf', 'epub', 'video', 'other'];
+    }
+
+    function isLocation(v) {
+      return v in ['library', 'feed'];
+    }
+
+    function isStatus(v) {
+      return v in ['unread', 'archived'];
+    }
+
+    function isProgress(v) {
+      return v is number && v >= 0 && v <= 1;
+    }
+
+    // An uploaded file must live at users/{uid}/uploads/{itemId}/{fileName}.
+    function isUploadFile(f, uid, itemId) {
+      let parts = f['path'] is string ? f['path'].split('/') : [];
+      return f is map
+        && f.keys().hasAll(['path', 'name', 'contentType', 'size'])
+        && f.keys().hasOnly(['path', 'name', 'contentType', 'size'])
+        && isStr(f.path, 1024)
+        && parts.size() == 5
+        && parts[0] == 'users'
+        && parts[1] == uid
+        && parts[2] == 'uploads'
+        && parts[3] == itemId
+        && parts[4].size() > 0
+        && isNonEmptyStr(f.name, 255)
+        && f.contentType in ['application/pdf', 'application/epub+zip']
+        && f['size'] is int
+        && f['size'] > 0
+        && f['size'] <= 100 * 1024 * 1024;
+    }
+
+    function validNewItem(uid, itemId) {
+      let d = request.resource.data;
+      return d.keys().hasAll(itemFields())
+        && d.keys().hasOnly(itemFields())
+        && isNullOrStr(d.url, 2048)
+        && isItemType(d.type)
+        && isLocation(d.location)
+        && isStatus(d.status)
+        && d.favorite is bool
+        && isStr(d.title, 500)
+        && d.titleLocked is bool
+        && isNullOrStr(d.author, 500)
+        && isNullOrStr(d.siteName, 500)
+        && isNullOrStr(d.excerpt, 1000)
+        && isNullOrStr(d.imageUrl, 2048)
+        && isNullOrTimestamp(d.publishedAt)
+        && isNullOrCount(d.wordCount)
+        && isNullOrCount(d.readingMinutes)
+        && isNullOrId(d.categoryId)
+        && isTags(d.tags)
+        && isStr(d.note, 20000)
+        && isProgress(d.progress)
+        && d.fetchStatus in ['pending', 'uploading']
+        && d.fetchError == null
+        && d.contentChunks == 0
+        && (d.file == null || isUploadFile(d.file, uid, itemId))
+        && isNullOrId(d.feedId)
+        && d.paper == null
+        && d.createdAt is timestamp
+        && d.updatedAt is timestamp
+        && isNullOrTimestamp(d.lastOpenedAt)
+        && isNullOrTimestamp(d.archivedAt);
+    }
+
+    // Only changed keys are validated, so server-written values (e.g. a long
+    // extracted title) never block unrelated client updates such as progress.
+    // A removed key fails its check (missing field access), so keys can't be deleted.
+    function validItemUpdate(uid, itemId) {
+      let d = request.resource.data;
+      let ch = d.diff(resource.data).affectedKeys();
+      return ch.hasOnly(itemClientFields())
+        && (!('url' in ch) || isNullOrStr(d.url, 2048))
+        && (!('type' in ch) || isItemType(d.type))
+        && (!('location' in ch) || isLocation(d.location))
+        && (!('status' in ch) || isStatus(d.status))
+        && (!('favorite' in ch) || d.favorite is bool)
+        && (!('title' in ch) || isStr(d.title, 500))
+        && (!('titleLocked' in ch) || d.titleLocked is bool)
+        && (!('author' in ch) || isNullOrStr(d.author, 500))
+        && (!('siteName' in ch) || isNullOrStr(d.siteName, 500))
+        && (!('excerpt' in ch) || isNullOrStr(d.excerpt, 1000))
+        && (!('imageUrl' in ch) || isNullOrStr(d.imageUrl, 2048))
+        && (!('publishedAt' in ch) || isNullOrTimestamp(d.publishedAt))
+        && (!('wordCount' in ch) || isNullOrCount(d.wordCount))
+        && (!('readingMinutes' in ch) || isNullOrCount(d.readingMinutes))
+        && (!('categoryId' in ch) || isNullOrId(d.categoryId))
+        && (!('tags' in ch) || isTags(d.tags))
+        && (!('note' in ch) || isStr(d.note, 20000))
+        && (!('progress' in ch) || isProgress(d.progress))
+        // The client may only (re)queue processing.
+        && (!('fetchStatus' in ch) || d.fetchStatus == 'pending')
+        // The client may only clear an error (refetch); never write one.
+        && (!('fetchError' in ch) || d.fetchError == null)
+        // The client may attach its upload only while the item is still uploading.
+        && (!('file' in ch) || (resource.data.fetchStatus == 'uploading'
+              && (d.file == null || isUploadFile(d.file, uid, itemId))))
+        && (!('feedId' in ch) || isNullOrId(d.feedId))
+        && (!('updatedAt' in ch) || d.updatedAt is timestamp)
+        && (!('lastOpenedAt' in ch) || isNullOrTimestamp(d.lastOpenedAt))
+        && (!('archivedAt' in ch) || isNullOrTimestamp(d.archivedAt));
+    }
+
+    // ---- highlights ----------------------------------------------------------
+
+    function validHighlight(d) {
+      return d.keys().hasAll(['itemId', 'text', 'note', 'prefix', 'suffix', 'createdAt', 'updatedAt'])
+        && d.keys().hasOnly(['itemId', 'text', 'note', 'prefix', 'suffix', 'createdAt', 'updatedAt'])
+        && isId(d.itemId)
+        && isNonEmptyStr(d.text, 5000)
+        && isStr(d.note, 5000)
+        && isStr(d.prefix, 64)
+        && isStr(d.suffix, 64)
+        && d.createdAt is timestamp
+        && d.updatedAt is timestamp;
+    }
+
+    // ---- categories ----------------------------------------------------------
+
+    function validCategory(d) {
+      return d.keys().hasAll(['name', 'order', 'createdAt'])
+        && d.keys().hasOnly(['name', 'order', 'createdAt'])
+        && isNonEmptyStr(d.name, 60)
+        && d.order is number
+        && d.createdAt is timestamp;
+    }
+
+    // ---- feeds ---------------------------------------------------------------
+
+    function validFeedUpdate() {
+      let d = request.resource.data;
+      let ch = d.diff(resource.data).affectedKeys();
+      return ch.hasOnly(['title', 'categoryId', 'tags', 'fullText'])
+        && (!('title' in ch) || isStr(d.title, 500))
+        && (!('categoryId' in ch) || isNullOrId(d.categoryId))
+        && (!('tags' in ch) || isTags(d.tags))
+        && (!('fullText' in ch) || d.fullText is bool);
+    }
+
+    // ---- matches -------------------------------------------------------------
+
+    match /users/{uid} {
+      // The user doc and every subcollection (items, content, highlights,
+      // categories, feeds, search, apiKeys, ...) are readable by the owner only.
+      allow read: if isOwner(uid);
+
+      match /{document=**} {
+        allow read: if isOwner(uid);
+      }
+
+      match /items/{itemId} {
+        allow create: if isOwner(uid) && validNewItem(uid, itemId);
+        allow update: if isOwner(uid) && validItemUpdate(uid, itemId);
+        allow delete: if isOwner(uid);
+
+        // content/{n}: server-written; owner read only (granted above).
+      }
+
+      match /highlights/{highlightId} {
+        allow create: if isOwner(uid) && validHighlight(request.resource.data);
+        allow update: if isOwner(uid)
+          && validHighlight(request.resource.data)
+          && request.resource.data.itemId == resource.data.itemId
+          && request.resource.data.createdAt == resource.data.createdAt;
+        allow delete: if isOwner(uid);
+      }
+
+      match /categories/{categoryId} {
+        allow create: if isOwner(uid) && validCategory(request.resource.data);
+        allow update: if isOwner(uid)
+          && validCategory(request.resource.data)
+          && request.resource.data.createdAt == resource.data.createdAt;
+        allow delete: if isOwner(uid);
+      }
+
+      // Feeds are created by the addFeed / importOpml callables.
+      match /feeds/{feedId} {
+        allow update: if isOwner(uid) && validFeedUpdate();
+        allow delete: if isOwner(uid);
+      }
+
+      // search/{itemId} and apiKeys/{keyId}: server-written; owner read only
+      // (granted above). API keys are revoked through the revokeApiKey callable.
+    }
+
+    // Top-level loginCodes, apiKeys and rateLimits are server-only: no rule
+    // grants access, so all client reads and writes are denied.
+  }
+}

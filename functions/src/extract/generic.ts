@@ -158,6 +158,15 @@ export interface HtmlExtractOptions {
   prepare?: (doc: Document) => void;
 }
 
+/**
+ * Replace <font> elements by their children. Readability does not count <font> as phrasing content, so on
+ * old-style pages (paragraphs separated by <br><br>, e.g. paulgraham.com) a <font>-wrapped footnote marker
+ * would end the paragraph and be left dangling between paragraphs.
+ */
+export function unwrapFonts(root: Element): void {
+  for (const font of Array.from(root.querySelectorAll('font'))) font.replaceWith(...Array.from(font.childNodes));
+}
+
 /** Extract an article from an HTML string (pure; no network). */
 export function extractFromHtml(html: string, url: string, opts: HtmlExtractOptions = {}): Extracted {
   const dom = parseHtml(html, url);
@@ -166,7 +175,10 @@ export function extractFromHtml(html: string, url: string, opts: HtmlExtractOpti
     const base = doc.baseURI || url;
     const meta: PageMeta = extractMeta(doc, url);
     opts.prepare?.(doc);
-    if (doc.body) fixLazyImages(doc.body);
+    if (doc.body) {
+      fixLazyImages(doc.body);
+      unwrapFonts(doc.body);
+    }
     const bodyClone = doc.body ? (doc.body.cloneNode(true) as Element) : null;
 
     let contentEl: Element | null = null;
@@ -217,6 +229,9 @@ export function extractFromHtml(html: string, url: string, opts: HtmlExtractOpti
     if (!text && !title) throw new Error('No readable content found on this page (it may require JavaScript or a login)');
 
     const host = new URL(url).hostname.replace(/^www\./, '');
+    // Ignore canonical links that point at a site's home page (a common CMS misconfiguration).
+    let canonicalUrl = meta.canonicalUrl;
+    if (canonicalUrl && new URL(canonicalUrl).pathname === '/' && new URL(url).pathname !== '/') canonicalUrl = null;
     const c = meta.citation;
     const isPaper = !!c && (!!c.doi || !!c.arxivId || !!c.pdfUrl);
     return finalize({
@@ -229,7 +244,7 @@ export function extractFromHtml(html: string, url: string, opts: HtmlExtractOpti
       description,
       imageUrl: meta.imageUrl ?? firstImage(html2),
       publishedAt: meta.publishedAt ?? rPublished,
-      canonicalUrl: meta.canonicalUrl ?? url,
+      canonicalUrl: canonicalUrl ?? url,
       paper: isPaper && c
         ? {
             ...(c.doi ? { doi: c.doi } : {}),

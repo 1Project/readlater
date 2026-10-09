@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run",
-    "cap:sync": "npm run build && cap sync"
+    "cap:sync": "npm run build && cap sync",
+    "capacitor:copy:after": "node ../scripts/cap-strip-sw.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",

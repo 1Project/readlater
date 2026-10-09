@@ -1,0 +1,23 @@
+{
+  "name": "readlater-e2e",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "npm run test:rules && npm run test:e2e",
+    "test:rules": "firebase emulators:exec --only firestore,storage --project demo-readlater 'vitest run rules'",
+    "build:app": "npm --prefix ../functions run build && npm --prefix ../web run build:emu",
+    "test:e2e": "playwright test",
+    "typecheck": "tsc --noEmit -p .",
+    "screenshots": "UPDATE_SCREENSHOTS=1 playwright test"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^6.0.0",
+    "@playwright/test": "^1.64.0",
+    "@types/node": "^22.0.0",
+    "firebase": "^13.0.0",
+    "jszip": "^3.10.2",
+    "typescript": "~5.9.0",
+    "vitest": "^5.0.3"
+  }
+}

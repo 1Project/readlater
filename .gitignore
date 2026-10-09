@@ -1,6 +1,6 @@
 node_modules/
 dist/
-lib/
+/functions/lib/
 .env
 .env.local
 *.log
@@ -21,3 +21,4 @@ web/ios/DerivedData/
 *.keystore
 !debug.keystore
 service-account*.json
+*.tsbuildinfo

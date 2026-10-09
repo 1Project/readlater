@@ -37,6 +37,22 @@ export default defineConfig({
     }),
   ],
   server: { port: 5173 },
-  build: { target: 'es2020', sourcemap: true },
+  build: {
+    target: 'es2020',
+    sourcemap: true,
+    // The Firebase SDK (~700 kB minified) is needed on every page, so it is one stable vendor chunk; pdf.js
+    // stays in the lazily loaded PDF viewer chunk.
+    chunkSizeWarningLimit: 800,
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            { name: 'firebase', test: /node_modules[\\/](@firebase|firebase|re2js|idb|tslib)[\\/]/, priority: 2 },
+            { name: 'react', test: /node_modules[\\/](react|react-dom|react-router|scheduler|cookie|set-cookie-parser)[\\/]/, priority: 1 },
+          ],
+        },
+      },
+    },
+  },
   test: { environment: 'jsdom' },
 } as never);
