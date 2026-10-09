@@ -190,7 +190,7 @@ export function pickPdfTitle(infoTitle: unknown, firstPage: PdfLine[], fallback:
   const top = firstPage.slice(0, 25).filter((l) => l.text.length >= 3 && !PAGE_NUM.test(l.text));
   if (top.length) {
     const maxSize = Math.max(...top.map((l) => l.fontSize));
-    const body = bodySize ?? median(firstPage.map((l) => l.fontSize));
+    const body = bodySize ?? bodyFontSize([firstPage]);
     if (maxSize > body * 1.15) {
       const start = top.findIndex((l) => l.fontSize === maxSize);
       const parts: string[] = [];

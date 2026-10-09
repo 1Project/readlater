@@ -158,7 +158,7 @@ async function buildEpub(opts: { epub3?: boolean; drm?: boolean } = {}): Promise
     <dc:language>en</dc:language>
     <dc:publisher>Example Press</dc:publisher>
     <dc:date>1818-01-01</dc:date>
-    <dc:description>&lt;p&gt;A &lt;b&gt;classic&lt;/b&gt; tale.&lt;/p&gt;</dc:description>
+    <dc:description>&lt;p&gt;A &lt;b&gt;classic&lt;/b&gt; tale of ambition and creation.&lt;/p&gt;</dc:description>
     <meta name="cover" content="cover-img"/>
   </metadata>
   <manifest>
@@ -231,7 +231,7 @@ describe('EPUB', () => {
     expect(r.author).toBe('Mary Shelley, Percy Shelley');
     expect(r.siteName).toBe('Example Press');
     expect(r.publishedAt?.getUTCFullYear()).toBe(1818);
-    expect(r.excerpt).toBe('A classic tale.');
+    expect(r.excerpt).toBe('A classic tale of ambition and creation.');
     expect(r.imageUrl).toBe('https://storage.example/001-cover.png');
     expect(uploads).toEqual([`001-cover.png|image/png|${PNG.byteLength}`, `002-fig_1.png|image/png|${PNG.byteLength}`]);
     expect(r.html).toBe(
