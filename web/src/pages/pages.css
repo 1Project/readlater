@@ -257,9 +257,12 @@
 .list-status .row {
   gap: 4px;
 }
+/* Active filters: bold and outlined (not the filled .btn.active look, which hid the label). */
 .btn.filter-button.active {
   font-weight: 600;
   color: var(--fg);
+  background: transparent;
+  border-color: var(--border);
 }
 
 /* Active filters: one row of removable chips under the status row. */

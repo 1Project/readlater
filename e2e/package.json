@@ -10,7 +10,8 @@
     "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit -p .",
     "screenshots": "UPDATE_SCREENSHOTS=1 playwright test",
-    "gallery": "playwright test -c playwright.gallery.config.ts"
+    "gallery": "playwright test -c playwright.gallery.config.ts",
+    "demos": "playwright test -c playwright.demos.config.ts"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^6.0.0",

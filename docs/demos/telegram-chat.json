@@ -1,0 +1,37 @@
+{
+  "bot": "readlater_e2e_bot",
+  "chat": [
+    {
+      "from": "me",
+      "text": "/start 9fNOJJZ36c1dPp7eUe2qHeBK"
+    },
+    {
+      "from": "bot",
+      "text": "✓ Connected to Readlater as reader-mv3s58xq6ykm@example.com. Links you send here are saved to that account; /unlink disconnects.\n\nSend or forward me a link and I save it to Readlater. You can also send a PDF or EPUB file (up to 20 MB), or plain text to save it as a note.\n#hashtags in your message become tags.\n\n/latest – your 5 newest unread items\n/unlink – disconnect this chat\n/help – this message"
+    },
+    {
+      "from": "me",
+      "text": "Great essay on writing https://www.paulgraham.com/simply.html #writing"
+    },
+    {
+      "from": "bot",
+      "text": "✓ Saved: Write Simply"
+    },
+    {
+      "from": "me",
+      "text": "Remember to check the Boox refresh settings #todo"
+    },
+    {
+      "from": "bot",
+      "text": "✓ Saved note: Remember to check the Boox refresh settings"
+    },
+    {
+      "from": "me",
+      "text": "/latest"
+    },
+    {
+      "from": "bot",
+      "text": "1. How to Work Hard\nhttps://www.paulgraham.com/hwh.html\n\n2. Attention Is All You Need\nhttps://arxiv.org/abs/1706.03762\n\n3. Remember to check the Boox refresh settings\nhttps://demo-readlater.web.app/item/t_19e156921adc872dd5639862\n\n4. Write Simply\nhttps://www.paulgraham.com/simply.html\n\n5. How to Write Usefully\nhttps://www.paulgraham.com/useful.html"
+    }
+  ]
+}
