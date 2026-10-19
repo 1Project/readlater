@@ -137,11 +137,19 @@ else
   "${FIREBASE[@]}" projects:create "$PROJECT" --display-name "Readlater" ||
     die "Could not create the project. The id may be taken — re-run with another id."
 fi
-if ! "${FIREBASE[@]}" projects:list --json | node -e '
-  let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const r=JSON.parse(s.slice(s.indexOf("{"))).result||[];
-  process.exit(r.some(p=>p.projectId===process.argv[1])?0:1)})' "$PROJECT"; then
-  info "Adding Firebase to $PROJECT…"
-  "${FIREBASE[@]}" projects:addfirebase "$PROJECT"
+# Note: write ${VAR} (with braces) before non-ASCII text such as "…": macOS's bash 3.2 otherwise reads the
+# first byte of the character as part of the variable name and fails under `set -u`.
+firebase_has_project() {
+  "${FIREBASE[@]}" projects:list --json | node -e '
+    let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const r=JSON.parse(s.slice(s.indexOf("{"))).result||[];
+    process.exit(r.some(p=>p.projectId===process.argv[1])?0:1)})' "$PROJECT"
+}
+# A project created a moment ago can take a little while to show up in the Firebase project list.
+for _ in 1 2 3 4 5 6; do firebase_has_project && break; sleep 5; done
+if ! firebase_has_project; then
+  info "Adding Firebase to ${PROJECT}…"
+  "${FIREBASE[@]}" projects:addfirebase "$PROJECT" || firebase_has_project ||
+    die "Could not add Firebase to $PROJECT. Add it in https://console.firebase.google.com (Add project → pick $PROJECT), then re-run."
 fi
 PROJECT_NUMBER="$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')"
 info "Project $PROJECT (number $PROJECT_NUMBER)"
