@@ -197,7 +197,12 @@ say "Firestore"
 if gcloud firestore databases describe --database='(default)' --project "$PROJECT" >/dev/null 2>&1; then
   info "Database (default) exists ($(gcloud firestore databases describe --database='(default)' --project "$PROJECT" --format='value(locationId)'))."
 else
-  [[ -n "$FS_LOCATION" ]] || FS_LOCATION="$(ask "Firestore location (nam5 = US multi-region, eur3 = Europe, or a region like europe-west1)" "nam5")"
+  FS_RE='^([a-z]+[0-9]|[a-z]+-[a-z]+[0-9]+)$'
+  until [[ "$FS_LOCATION" =~ $FS_RE ]]; do
+    [[ -z "$FS_LOCATION" ]] || warn "\"$FS_LOCATION\" is not a location id (examples: nam5, eur3, europe-west1)."
+    [[ "$INTERACTIVE" -eq 1 || -z "$FS_LOCATION" ]] || die "Invalid FIRESTORE_LOCATION."
+    FS_LOCATION="$(ask "Firestore location (nam5 = US multi-region, eur3 = Europe, or a region like europe-west1)" "nam5")"
+  done
   gcloud firestore databases create --database='(default)' --location="$FS_LOCATION" --type=firestore-native --project "$PROJECT"
 fi
 # The same TTL policies are in firestore.indexes.json, so `firebase deploy --force` keeps them.
@@ -216,7 +221,12 @@ BUCKETS="$(api GET "https://firebasestorage.googleapis.com/v1beta/projects/$PROJ
 if printf '%s' "$BUCKETS" | grep -qE "\"projects/$PROJECT/buckets/$PROJECT\.(firebasestorage\.app|appspot\.com)\""; then
   info "Default bucket exists."
 else
-  [[ -n "$ST_LOCATION" ]] || ST_LOCATION="$(ask "Storage location (us-central1, us-east1 and us-west1 have a free tier)" "us-central1")"
+  ST_RE='^([a-z]+-[a-z]+[0-9]+|us|eu|asia)$'
+  until [[ "$ST_LOCATION" =~ $ST_RE ]]; do
+    [[ -z "$ST_LOCATION" ]] || warn "\"$ST_LOCATION\" is not a location id (examples: us-central1, europe-west1)."
+    [[ "$INTERACTIVE" -eq 1 || -z "$ST_LOCATION" ]] || die "Invalid STORAGE_LOCATION."
+    ST_LOCATION="$(ask "Storage location (us-central1, us-east1 and us-west1 have a free tier)" "us-central1")"
+  done
   if api POST "https://firebasestorage.googleapis.com/v1alpha/projects/$PROJECT/defaultBucket" \
       "{\"location\":\"$(printf '%s' "$ST_LOCATION" | tr '[:lower:]' '[:upper:]')\"}" >/dev/null; then
     info "Created the default bucket."
