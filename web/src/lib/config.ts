@@ -23,7 +23,7 @@ export interface LoadedConfig extends AppConfig {
 
 export const DISABLED_CONFIG: AppConfig = Object.freeze({ ai: false, telegramBot: null, inboundEmailDomain: null });
 
-export const REPO_URL = ((import.meta.env.VITE_REPO_URL as string | undefined) || 'https://github.com/1Project/scratch').replace(/\/$/, '');
+export const REPO_URL = ((import.meta.env.VITE_REPO_URL as string | undefined) || 'https://github.com/1Project/readlater').replace(/\/$/, '');
 
 const STORAGE_KEY = 'rl.config';
 
