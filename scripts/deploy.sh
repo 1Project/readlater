@@ -64,6 +64,16 @@ if [[ ",$ONLY," == *",hosting,"* ]]; then
   (cd "$ROOT/web" && npm run build)
 fi
 
+# Optional integrations (AI, Telegram, email) are switched on by functions/.env.<project>, which setup.sh
+# writes and git does not track. Without it the functions deploy with those features off.
+if [[ ",$ONLY," == *",functions"* && ! -f "$ROOT/functions/.env.$PROJECT" && -z "${GITHUB_ACTIONS:-}" ]]; then
+  echo
+  echo "Warning: functions/.env.$PROJECT not found, so AI, the Telegram bot and email newsletters will be OFF"
+  echo "after this deploy. To switch them on (keys already in Secret Manager are reused), run:"
+  echo "  scripts/setup.sh --project $PROJECT"
+  echo
+fi
+
 say "Deploying ($ONLY) to $PROJECT"
 cd "$ROOT"
 # --force: remove functions that no longer exist in the source and accept the default
