@@ -35,15 +35,13 @@ fi
 [[ -n "$PROJECT" && "$PROJECT" != demo-* ]] ||
   die "No Firebase project. Pass --project <id>, set FIREBASE_PROJECT, or run scripts/setup.sh first."
 
-if [[ -x "$ROOT/node_modules/.bin/firebase" ]]; then
-  FIREBASE=("$ROOT/node_modules/.bin/firebase")
-elif command -v firebase >/dev/null 2>&1; then
-  FIREBASE=(firebase)
-else
-  say "Installing firebase-tools (repo devDependency)"
+# Always use the repo's pinned firebase-tools, never a global one: older CLIs analyse the functions without
+# functions/.env.<project>, which deploys the optional integrations switched off.
+if [[ "$SKIP_INSTALL" -eq 0 || ! -x "$ROOT/node_modules/.bin/firebase" ]]; then
+  say "Installing the repo's Firebase CLI"
   (cd "$ROOT" && npm ci)
-  FIREBASE=("$ROOT/node_modules/.bin/firebase")
 fi
+FIREBASE=("$ROOT/node_modules/.bin/firebase")
 
 if [[ "$SKIP_INSTALL" -eq 0 ]]; then
   say "Installing dependencies"
@@ -94,6 +92,25 @@ until "${FIREBASE[@]}" deploy --only "$ONLY" --project "$PROJECT" --force --non-
   sleep 120
   attempt=$((attempt + 1))
 done
+
+# Check that the deployed functions report the integrations the settings file switches on.
+FUNCTIONS_ENV_FILE="$ROOT/functions/.env.$PROJECT"
+if [[ ",$ONLY," == *",functions"* && -f "$FUNCTIONS_ENV_FILE" ]]; then
+  WANT_AI="$(sed -n 's/^AI_ENABLED=//p' "$FUNCTIONS_ENV_FILE" | tail -1)"
+  WANT_TG="$(sed -n 's/^TELEGRAM_BOT_USERNAME=//p' "$FUNCTIONS_ENV_FILE" | tail -1)"
+  LIVE="$(curl -sS --max-time 30 -X POST -H 'Content-Type: application/json' -d '{"data":{}}' \
+    "https://us-central1-$PROJECT.cloudfunctions.net/getConfig" 2>/dev/null || true)"
+  CHECK="$(printf '%s' "$LIVE" | node -e '
+    let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{let r={};try{r=JSON.parse(s).result||{}}catch{}
+    const [ai,tg]=process.argv.slice(1);const bad=[];
+    if(ai==="1"&&r.ai!==true)bad.push("AI");if(tg&&!r.telegramBot)bad.push("the Telegram bot");
+    process.stdout.write(bad.join(" and "))})' "$WANT_AI" "$WANT_TG")"
+  if [[ -n "$CHECK" ]]; then
+    echo
+    echo "Warning: $CHECK is switched on in functions/.env.$PROJECT but the deployed functions report it as off."
+    echo "Check that its key exists: ${FIREBASE[*]} functions:secrets:access <NAME> --project $PROJECT"
+  fi
+fi
 
 # Telegram: point the bot at the deployed `telegram` function (idempotent; also sets the bot's command list).
 # The function checks the webhook secret, so it is read from Secret Manager and sent as the header.

@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { bodyFields, lookupVariants, parseItemsQuery, parseSaveExtras, parseSaveRequest, rankTags } from '../src/api';
-import { appConfig, generateInboundToken, generateTelegramLinkToken, INBOUND_TOKEN_RE, optionalSecrets, publicUrl, safeEqual, TELEGRAM_LINK_TOKEN_RE } from '../src/integrations';
+import { appConfig, generateInboundToken, parseDotenv, generateTelegramLinkToken, INBOUND_TOKEN_RE, optionalSecrets, publicUrl, safeEqual, TELEGRAM_LINK_TOKEN_RE } from '../src/integrations';
 
 const KEY = 'rl_' + 'b'.repeat(40);
 const json = (body: Record<string, unknown>, query: Record<string, unknown> = {}) => ({
@@ -90,6 +90,38 @@ describe('integration config', () => {
     process.env.AI_ENABLED = '0';
     delete process.env.READLATER_SECRETS;
     expect(optionalSecrets('ANTHROPIC_API_KEY')).toEqual([]);
+  });
+
+  it('parses dotenv files', () => {
+    expect(parseDotenv('# c\nA=1\nexport B = "two words"\nC=\'x=y\'\n\nbad line\nD=')).toEqual({ A: '1', B: 'two words', C: 'x=y', D: '' });
+  });
+
+  it('reads the switches from functions/.env.<project> during deploy-time analysis', async () => {
+    const { mkdtempSync, writeFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = mkdtempSync(join(tmpdir(), 'rl-env-'));
+    writeFileSync(join(dir, '.env.demo-x'), 'TELEGRAM_BOT_USERNAME=my_bot\nAI_ENABLED=1\n');
+    for (const k of ['TELEGRAM_BOT_USERNAME', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_WEBHOOK_SECRET', 'AI_ENABLED', 'ANTHROPIC_API_KEY', 'READLATER_SECRETS', 'FUNCTIONS_CONTROL_API']) delete process.env[k];
+    process.env.GCLOUD_PROJECT = 'demo-x';
+    const cwd = process.cwd();
+    process.chdir(dir);
+    try {
+      vi.resetModules();
+      const outside = await import('../src/integrations');
+      expect(outside.optionalSecrets('TELEGRAM_BOT_TOKEN', 'ANTHROPIC_API_KEY')).toEqual([]); // not analysing: env only
+      process.env.FUNCTIONS_CONTROL_API = 'true';
+      vi.resetModules();
+      const analysing = await import('../src/integrations');
+      expect(analysing.optionalSecrets('TELEGRAM_BOT_TOKEN', 'TELEGRAM_WEBHOOK_SECRET', 'ANTHROPIC_API_KEY')).toEqual([
+        'TELEGRAM_BOT_TOKEN',
+        'TELEGRAM_WEBHOOK_SECRET',
+        'ANTHROPIC_API_KEY',
+      ]);
+    } finally {
+      process.chdir(cwd);
+      vi.resetModules();
+    }
   });
 
   it('reports features from the environment', () => {

@@ -12,6 +12,8 @@
  */
 import './options';
 import { createHash, timingSafeEqual } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions/v2';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
@@ -23,23 +25,71 @@ import { BASE62, randomString } from './util';
 
 const env = (name: string): string => (process.env[name] ?? '').trim();
 
+/** Parse dotenv text: KEY=VALUE lines; '#' comments; optional single or double quotes around the value. */
+export function parseDotenv(text: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    const m = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line);
+    if (!m) continue;
+    let v = m[2].trim();
+    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1);
+    out[m[1]] = v;
+  }
+  return out;
+}
+
 /**
- * Secret names a function should bind, decided when the code is loaded (at deploy time the Firebase CLI loads
- * it with functions/.env and .env.<project> applied). A secret is bound when its feature is switched on —
+ * The functions' .env files (functions/.env, then .env.<project> overriding it), read only while the Firebase
+ * CLI analyses the code at deploy time (FUNCTIONS_CONTROL_API=true; the working directory is functions/).
+ * Newer CLIs pass these values in the environment, but older ones (e.g. firebase-tools 15.13) load them only
+ * after the analysis, which would leave every optional secret unbound and the integrations switched off.
+ */
+let deployEnvCache: Record<string, string> | null = null;
+function deployTimeEnv(): Record<string, string> {
+  if (process.env.FUNCTIONS_CONTROL_API !== 'true') return {};
+  if (deployEnvCache) return deployEnvCache;
+  let project = env('GCLOUD_PROJECT');
+  if (!project) {
+    try {
+      project = String((JSON.parse(env('FIREBASE_CONFIG') || '{}') as { projectId?: string }).projectId ?? '');
+    } catch {
+      project = '';
+    }
+  }
+  const read = (file: string): Record<string, string> => {
+    try {
+      return parseDotenv(readFileSync(join(process.cwd(), file), 'utf8'));
+    } catch {
+      return {};
+    }
+  };
+  deployEnvCache = { ...read('.env'), ...(project ? read(`.env.${project}`) : {}) };
+  return deployEnvCache;
+}
+
+/** A setting from the environment, or (at deploy-time analysis only) from the functions' .env files. */
+const setting = (name: string): string => env(name) || (deployTimeEnv()[name] ?? '').trim();
+
+/**
+ * Secret names a function should bind, decided when the code is loaded (at deploy time; the switches are read
+ * from the environment or, during the CLI's analysis, straight from functions/.env and .env.<project>). A secret is bound when its feature is switched on —
  * TELEGRAM_BOT_USERNAME for the Telegram secrets, INBOUND_EMAIL_DOMAIN for INBOUND_EMAIL_SECRET, AI_ENABLED for
  * ANTHROPIC_API_KEY — or when it is listed in READLATER_SECRETS (comma separated), and it is not already
  * provided as a plain env value (a secret and an env var of the same name cannot coexist).
  */
 export function optionalSecrets(...names: string[]): string[] {
-  const listed = env('READLATER_SECRETS')
+  const listed = setting('READLATER_SECRETS')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
   return names.filter((n) => {
-    if (env(n)) return false;
+    if (setting(n)) return false;
     if (listed.includes(n)) return true;
     const flag = SECRET_FEATURE_FLAG[n];
-    return !!flag && !!env(flag) && env(flag) !== '0' && env(flag).toLowerCase() !== 'false';
+    const on = flag ? setting(flag) : '';
+    return !!on && on !== '0' && on.toLowerCase() !== 'false';
   });
 }
 

@@ -73,15 +73,12 @@ NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
 command -v npm >/dev/null 2>&1 || die "npm not found."
 command -v curl >/dev/null 2>&1 || die "curl not found."
 command -v gcloud >/dev/null 2>&1 || die "Google Cloud CLI (gcloud) not found. Install it: https://cloud.google.com/sdk/docs/install"
-if [[ -x "$ROOT/node_modules/.bin/firebase" ]]; then
-  FIREBASE=("$ROOT/node_modules/.bin/firebase")
-elif command -v firebase >/dev/null 2>&1; then
-  FIREBASE=(firebase)
-else
-  info "Installing firebase-tools (repo devDependency)…"
+# Always the repo's pinned firebase-tools (a global one may be too old; see scripts/deploy.sh).
+if [[ ! -x "$ROOT/node_modules/.bin/firebase" ]]; then
+  info "Installing the repo's Firebase CLI…"
   (cd "$ROOT" && npm ci --no-audit --no-fund)
-  FIREBASE=("$ROOT/node_modules/.bin/firebase")
 fi
+FIREBASE=("$ROOT/node_modules/.bin/firebase")
 info "node $(node -v), $(gcloud --version 2>/dev/null | head -1), firebase-tools $("${FIREBASE[@]}" --version)"
 
 # ---------------------------------------------------------------------------
