@@ -68,17 +68,22 @@ say "Deploying ($ONLY) to $PROJECT"
 cd "$ROOT"
 # --force: remove functions that no longer exist in the source and accept the default
 # container-image cleanup policy instead of prompting.
-if ! "${FIREBASE[@]}" deploy --only "$ONLY" --project "$PROJECT" --force --non-interactive; then
-  if [[ ",$ONLY," == *",functions"* ]]; then
+# The first functions deploy on a new project often fails while Google Cloud finishes setting up service
+# agents (Eventarc permissions, the function source bucket, Cloud Run): wait and retry a few times.
+attempt=1
+until "${FIREBASE[@]}" deploy --only "$ONLY" --project "$PROJECT" --force --non-interactive; do
+  if [[ ",$ONLY," != *",functions"* || "$attempt" -ge 3 ]]; then
     echo
-    echo "Deploy failed. The first deploy of Firestore/Storage triggers often fails while Google Cloud"
-    echo "finishes granting service-agent permissions. Retrying in 90 seconds…"
-    sleep 90
-    "${FIREBASE[@]}" deploy --only "$ONLY" --project "$PROJECT" --force --non-interactive
-  else
+    echo "Deploy failed. If the errors mention permissions or 'An unexpected error occurred', wait a few"
+    echo "minutes and run scripts/deploy.sh again; for build errors open the Cloud Build log link above."
     exit 1
   fi
-fi
+  echo
+  echo "Deploy attempt $attempt failed. A project's first functions deploy often fails while Google Cloud"
+  echo "finishes setting up (Eventarc permissions, buckets, Cloud Run). Retrying in 2 minutes…"
+  sleep 120
+  attempt=$((attempt + 1))
+done
 
 # Telegram: point the bot at the deployed `telegram` function (idempotent; also sets the bot's command list).
 # The function checks the webhook secret, so it is read from Secret Manager and sent as the header.
