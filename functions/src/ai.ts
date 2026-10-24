@@ -228,8 +228,17 @@ export function buildParams(req: AiRequest, model = aiModel(), fallbacks = env('
   return params;
 }
 
+/** The API's own error message ("Your credit balance is too low…"), without the status prefix. */
+export function apiErrorMessage(e: InstanceType<typeof Anthropic.APIError>): string {
+  const body = e.error as { error?: { message?: unknown }; message?: unknown } | undefined;
+  const msg = body?.error?.message ?? body?.message ?? e.message;
+  return typeof msg === 'string' ? msg.replace(/\s+/g, ' ').trim().slice(0, 300) : '';
+}
+
+const BILLING_RE = /credit balance|billing|purchase credits|plans? (?:&|and) billing/i;
+
 /** Map API failures to callable errors with messages fit for the user. */
-export function toHttpsError(e: unknown): HttpsError {
+export function toHttpsError(e: unknown, model = aiModel()): HttpsError {
   if (e instanceof HttpsError) return e;
   if (e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError) {
     logger.error('ai: API key rejected', { status: e.status, message: e.message });
@@ -238,9 +247,14 @@ export function toHttpsError(e: unknown): HttpsError {
   if (e instanceof Anthropic.RateLimitError) return new HttpsError('resource-exhausted', 'The AI service is busy, please try again in a minute');
   if (e instanceof Anthropic.APIConnectionError) return new HttpsError('unavailable', 'Could not reach the AI service, please try again');
   if (e instanceof Anthropic.APIError) {
-    logger.error('ai: API error', { status: e.status, message: e.message });
+    const detail = apiErrorMessage(e);
+    logger.error('ai: API error', { status: e.status, message: detail, requestId: e.requestID ?? null });
     if (typeof e.status === 'number' && e.status >= 500) return new HttpsError('unavailable', 'The AI service is temporarily unavailable, please try again');
-    return new HttpsError('internal', 'The AI request failed');
+    if (e.status === 402 || BILLING_RE.test(detail)) {
+      return new HttpsError('failed-precondition', 'The AI account has no credits left. Add credits (or claim your plan\'s API credits) in the Claude Console.');
+    }
+    if (e.status === 404) return new HttpsError('failed-precondition', `The AI model ${model} is not available to this API key`);
+    return new HttpsError('internal', detail ? `The AI request failed: ${detail}` : 'The AI request failed');
   }
   logger.error('ai: unexpected error', { error: (e as Error)?.message });
   return new HttpsError('internal', 'The AI request failed');
@@ -249,10 +263,20 @@ export function toHttpsError(e: unknown): HttpsError {
 /** Call the Messages API and return the reply text. */
 export async function runAi(client: Anthropic, req: AiRequest, model = aiModel()): Promise<AiReply> {
   let res: Anthropic.Beta.Messages.BetaMessage;
+  const params = buildParams(req, model);
   try {
-    res = await client.beta.messages.create(buildParams(req, model));
+    res = await client.beta.messages.create(params);
   } catch (e) {
-    throw toHttpsError(e);
+    // Refusal fallbacks are a beta; an account without it gets a 400. Retry once without them.
+    const fallbackRejected =
+      e instanceof Anthropic.BadRequestError && params.fallbacks !== undefined && !BILLING_RE.test(apiErrorMessage(e));
+    if (!fallbackRejected) throw toHttpsError(e, model);
+    logger.warn('ai: retrying without fallbacks', { message: apiErrorMessage(e) });
+    try {
+      res = await client.beta.messages.create(buildParams(req, model, false));
+    } catch (e2) {
+      throw toHttpsError(e2, model);
+    }
   }
   if (res.stop_reason === 'refusal') {
     logger.warn('ai: refusal', { category: res.stop_details?.category ?? null });

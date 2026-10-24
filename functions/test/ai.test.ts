@@ -230,12 +230,52 @@ describe('runAi against a mock Messages API', () => {
   ];
   for (const [status, type, code] of cases) {
     it(`HTTP ${status} maps to ${code}`, async () => {
-      replies.push({ status, body: errorBody(type) });
+      replies.push({ status, body: errorBody(type) }, { status, body: errorBody(type) });
       const err = await runAi(client(), { action: 'ask', doc: doc(), question: 'q' }).catch((e: unknown) => e);
       expect(err).toBeInstanceOf(HttpsError);
       expect((err as HttpsError).code).toBe(code);
     });
   }
+
+  it('a 400 (e.g. fallbacks beta not enabled) is retried once without fallbacks', async () => {
+    replies.push({ status: 400, body: { type: 'error', error: { type: 'invalid_request_error', message: 'Unexpected value(s) for the `anthropic-beta` header' } } });
+    replies.push({ status: 200, body: message('answer') });
+    const r = await runAi(client(), { action: 'ask', doc: doc(), question: 'q' });
+    expect(r.text).toBe('answer');
+    expect(captured).toHaveLength(2);
+    expect(captured[0].body.fallbacks).toBe('default');
+    expect(captured[1].body).not.toHaveProperty('fallbacks');
+    expect(String(captured[1].headers['anthropic-beta'] ?? '')).not.toContain('server-side-fallback');
+  });
+
+  it('a 400 that persists reports the API message', async () => {
+    const body = { type: 'error', error: { type: 'invalid_request_error', message: 'messages: something is off' } };
+    replies.push({ status: 400, body }, { status: 400, body });
+    const err = (await runAi(client(), { action: 'ask', doc: doc(), question: 'q' }).catch((e: unknown) => e)) as HttpsError;
+    expect(err.code).toBe('internal');
+    expect(err.message).toBe('The AI request failed: messages: something is off');
+  });
+
+  it('no credits: a clear message and no retry', async () => {
+    replies.push({
+      status: 400,
+      body: { type: 'error', error: { type: 'invalid_request_error', message: 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.' } },
+    });
+    const err = (await runAi(client(), { action: 'summarize', doc: doc() }).catch((e: unknown) => e)) as HttpsError;
+    expect(err.code).toBe('failed-precondition');
+    expect(err.message).toMatch(/no credits left/);
+    expect(captured).toHaveLength(1);
+    replies.push({ status: 402, body: errorBody('billing_error') });
+    await expect(runAi(client(), { action: 'summarize', doc: doc() })).rejects.toMatchObject({ code: 'failed-precondition', message: expect.stringMatching(/credits/) });
+  });
+
+  it('an unknown model (404) names the model', async () => {
+    replies.push({ status: 404, body: errorBody('not_found_error') });
+    await expect(runAi(client(), { action: 'summarize', doc: doc() }, 'claude-nope')).rejects.toMatchObject({
+      code: 'failed-precondition',
+      message: 'The AI model claude-nope is not available to this API key',
+    });
+  });
 
   it('connection failures map to unavailable', async () => {
     const dead = new Anthropic({ apiKey: 'k', baseURL: 'http://127.0.0.1:9', maxRetries: 0 });
