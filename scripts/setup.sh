@@ -441,7 +441,7 @@ fi
 
 # ---------------------------------------------------------------------------
 say "First deploy"
-FIREBASE_PROJECT="$PROJECT" "$ROOT/scripts/deploy.sh" --project "$PROJECT"
+FIREBASE_PROJECT="$PROJECT" bash "$ROOT/scripts/deploy.sh" --project "$PROJECT"
 
 # ---------------------------------------------------------------------------
 say "GitHub Actions deploys (optional)"
