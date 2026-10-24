@@ -4,7 +4,7 @@
   "main": "lib/index.js",
   "type": "commonjs",
   "engines": {
-    "node": "22"
+    "node": ">=22"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -16,15 +16,15 @@
     "@anthropic-ai/sdk": "^0.132.1",
     "@mozilla/readability": "^0.6.0",
     "busboy": "^1.6.0",
-    "dompurify": "^3.4.16",
+    "dompurify": "^3.4.17",
     "entities": "^6.0.1",
     "fast-xml-parser": "^5.11.2",
     "firebase-admin": "^14.5.0",
     "firebase-functions": "^7.4.0",
     "jsdom": "^30.1.2",
     "jszip": "^3.10.2",
-    "mailparser": "^3.9.37",
-    "undici": "^8.11.2",
+    "mailparser": "^3.12.4",
+    "undici": "^8.12.3",
     "unpdf": "^1.8.1"
   },
   "devDependencies": {
@@ -34,5 +34,10 @@
     "@types/node": "^22.10.0",
     "typescript": "~5.9.0",
     "vitest": "^5.0.3"
+  },
+  "allowScripts": {
+    "@firebase/util": true,
+    "fsevents": true,
+    "protobufjs": true
   }
 }

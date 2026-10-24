@@ -9,6 +9,11 @@
     "e2e": "npm --prefix e2e test"
   },
   "devDependencies": {
-    "firebase-tools": "^15.33.0"
+    "firebase-tools": "^15.34.1"
+  },
+  "allowScripts": {
+    "fsevents": true,
+    "protobufjs": true,
+    "re2": true
   }
 }
